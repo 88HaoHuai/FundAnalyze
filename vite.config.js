@@ -42,11 +42,11 @@ export default defineConfig({
         }
       },
       '/api/stock': {
-        target: 'http://hq.sinajs.cn',
+        target: 'http://push2.eastmoney.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/stock/, ''),
+        rewrite: (path) => path.replace(/^\/api\/stock/, '/api/qt/ulist.get'),
         headers: {
-          'Referer': 'https://finance.sina.com.cn/'
+          'Referer': 'http://quote.eastmoney.com/'
         }
       },
     },
