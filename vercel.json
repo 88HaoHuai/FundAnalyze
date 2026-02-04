@@ -1,0 +1,16 @@
+{
+    "rewrites": [
+        {
+            "source": "/api/fund/:match*",
+            "destination": "http://fundgz.1234567.com.cn/js/:match*"
+        },
+        {
+            "source": "/api/pingzhong/:match*",
+            "destination": "/api/pingzhong-proxy?path=:match*"
+        },
+        {
+            "source": "/api/f10/:match*",
+            "destination": "/api/f10-proxy?path=:match*"
+        }
+    ]
+}
