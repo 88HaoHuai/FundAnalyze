@@ -1,8 +1,12 @@
 export default async function handler(req, res) {
+    // Explicitly extract only needed parameters
     const { path } = req.query;
-    // Reconstruct query parameters (except 'path')
-    const queryParams = new URLSearchParams(req.query);
-    queryParams.delete('path');
+    const { fundCode, pageIndex, pageSize } = req.query;
+
+    const queryParams = new URLSearchParams();
+    if (fundCode) queryParams.append('fundCode', fundCode);
+    if (pageIndex) queryParams.append('pageIndex', pageIndex);
+    if (pageSize) queryParams.append('pageSize', pageSize);
 
     const targetUrl = `http://api.fund.eastmoney.com/f10/${path}?${queryParams.toString()}`;
 
