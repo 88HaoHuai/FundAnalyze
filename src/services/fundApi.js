@@ -318,62 +318,58 @@ export const fundApi = {
         return results;
     },
 
-    // Fetch Real-time Stock Quotes (Eastmoney API)
+    // Fetch Real-time Stock Quotes (Tencent/Gtimg API)
     fetchStockQuotes: async (codes) => {
         if (!codes || codes.length === 0) return {};
 
-        // 1. Convert to Eastmoney format
-        // 6xxxxx -> 1.6xxxxx (SH)
-        // 0xxxxx -> 0.0xxxxx (SZ)
-        // 3xxxxx -> 0.3xxxxx (SZ)
-        // 8xxxxx -> 0.8xxxxx (BJ)
-        // 4xxxxx -> 0.4xxxxx (BJ)
-        const emCodes = codes.map(c => {
-            if (c.startsWith('6')) return `1.${c}`;
-            return `0.${c}`; // 0, 3, 8, 4 all map to 0. prefix usually for SZ/BJ in push2?
-            // Correction: 
-            // 0.xxxxxx for SZ
-            // 0.xxxxxx for BJ? Actually BJ is 0.8xxxxx usually.
-            // Let's stick to 0. for non-SH for now as it covers most.
-            // Actually let's be more precise if needed, but 0. works for SZ (0/3).
-            // Beijing (8/4) also works with 0. prefix in Eastmoney? 
-            // Yes, strict mapping: 1 for SH, 0 for everything else usually.
+        // 1. Convert to Tencent format
+        // 6xxxxx -> sh6xxxxx
+        // 0xxxxx -> sz0xxxxx
+        // 3xxxxx -> sz3xxxxx
+        // 8xxxxx -> bj8xxxxx
+        // 4xxxxx -> bj4xxxxx
+        const qtCodes = codes.map(c => {
+            if (c.startsWith('6')) return `sh${c}`;
+            if (c.startsWith('0')) return `sz${c}`;
+            if (c.startsWith('3')) return `sz${c}`;
+            if (c.startsWith('8')) return `bj${c}`;
+            if (c.startsWith('4')) return `bj${c}`;
+            return `sz${c}`;
         });
 
         try {
-            // Call proxy: /api/stock?fields=f12,f14,f2,f3&secids=1.600519,0.000001
-            const idParam = emCodes.join(',');
-            const res = await fetch(`/api/stock?invt=2&fltt=2&fields=f12,f14,f2,f3&secids=${idParam}`);
-            const json = await res.json();
+            // Call proxy: /api/stock?q=sh600519,sz000001
+            const listParam = qtCodes.join(',');
+            const res = await fetch(`/api/stock?q=${listParam}`);
+            const text = await res.text();
 
-            // Parse response: { data: { diff: [{ f12: "600519", f14: "Moutai", f2: 1500, f3: 1.23 }, ...] } }
+            // Parse response: v_sh600519="1~Moutai~600519~1500.00~1490.00~...";
             const map = {};
 
-            if (json && json.data && json.data.diff) {
-                // diff can be an array or object? Usually array for ulist.get
-                // Wait, ulist.get returns array.
-                const list = Array.isArray(json.data.diff) ? json.data.diff : Object.values(json.data.diff);
+            qtCodes.forEach((qc, idx) => {
+                const originalCode = codes[idx];
+                const match = text.match(new RegExp(`v_${qc}="([^"]+)";`));
+                if (match && match[1]) {
+                    const parts = match[1].split('~');
+                    if (parts.length > 30) {
+                        const name = parts[1];
+                        const price = parseFloat(parts[3]);
+                        const prevClose = parseFloat(parts[4]);
 
-                list.forEach(item => {
-                    // item.f12 is code, item.f14 is name
-                    // item.f2 is price (number), item.f3 is change% (number)
-                    // item.f3 might be "-" if suspended
+                        let change = 0;
+                        if (prevClose > 0 && price > 0) {
+                            change = ((price - prevClose) / prevClose) * 100;
+                        }
+                        if (price === 0) change = 0; // Suspended
 
-                    const code = item.f12;
-                    let change = item.f3;
-                    let price = item.f2;
-
-                    // Handle invalid data
-                    if (change === '-') change = 0;
-                    if (price === '-') price = 0;
-
-                    map[code] = {
-                        name: item.f14,
-                        price: price,
-                        change: typeof change === 'number' ? change.toFixed(2) : change
-                    };
-                });
-            }
+                        map[originalCode] = {
+                            name: name,
+                            price: price,
+                            change: parseFloat(change.toFixed(2))
+                        };
+                    }
+                }
+            });
 
             return map;
         } catch (e) {

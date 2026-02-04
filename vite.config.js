@@ -42,11 +42,11 @@ export default defineConfig({
         }
       },
       '/api/stock': {
-        target: 'http://push2.eastmoney.com',
+        target: 'http://qt.gtimg.cn',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/stock/, '/api/qt/ulist.get'),
+        rewrite: (path) => path.replace(/^\/api\/stock/, ''),
         headers: {
-          'Referer': 'http://quote.eastmoney.com/'
+          'User-Agent': 'Mozilla/5.0'
         }
       },
     },
