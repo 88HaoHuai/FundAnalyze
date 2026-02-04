@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, TrendingUp, TrendingDown, Loader } from 'lucide-react';
 import { fundApi } from '../services/fundApi';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, Line, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export function FundPerspective({ fund, onClose }) {
     const [history, setHistory] = useState(null);
@@ -50,7 +50,24 @@ export function FundPerspective({ fund, onClose }) {
 
     // Data Processing for Chart
     const processData = (data, range) => {
-        if (!data) return [];
+        if (!data || data.length === 0) return { processedData: [], signals: null };
+
+        // 1. Calculate MAs over the ENTIRE dataset first (to have valid MAs even at the start of the view)
+        const withIndicators = data.map((item, index, array) => {
+            const getMA = (days) => {
+                if (index < days - 1) return null;
+                const slice = array.slice(index - days + 1, index + 1);
+                const sum = slice.reduce((a, b) => a + b.value, 0);
+                return sum / days;
+            };
+            return {
+                ...item,
+                ma20: getMA(20),
+                ma60: getMA(60)
+            };
+        });
+
+        // 2. Filter for View Range
         const cutoff = new Date();
         switch (range) {
             case '7d': cutoff.setDate(cutoff.getDate() - 7); break;
@@ -63,23 +80,64 @@ export function FundPerspective({ fund, onClose }) {
         if (range === 'all') cutoff.setFullYear(2000);
 
         const cutoffTime = cutoff.getTime();
-        let filtered = data.filter(d => d.time >= cutoffTime);
 
-        if (filtered.length === 0 && data.length > 0) filtered = data.slice(-10);
+        // We need the data points to be consistent with the view
+        let filtered = withIndicators.filter(d => d.time >= cutoffTime);
+        if (filtered.length === 0 && withIndicators.length > 0) filtered = withIndicators.slice(-10);
 
-        if (filtered.length > 0) {
-            const startValue = filtered[0].value;
-            return filtered.map(p => ({
-                date: new Date(p.time).toLocaleDateString(),
-                value: Number(((p.value - startValue) / startValue * 100).toFixed(2)),
-                originalValue: p.value,
-                time: p.time
-            }));
-        }
-        return [];
+        if (filtered.length === 0) return { processedData: [], signals: null };
+
+        // 3. Normalize values for Chart (Percentage change relative to Start of View)
+        // Note: MAs also need to be normalized relative to the SAME start value to plot correctly on % scale
+        // OR, we plot everything on absolute scale? 
+        // Current chart uses %, which is good for "Return".
+        // But MAs are Price levels.
+        // Solution: Calculate "Percentage Return" for Matrix too.
+
+        const startValue = filtered[0].value;
+        const normalize = (val) => val ? Number(((val - startValue) / startValue * 100).toFixed(2)) : null;
+
+        const finalData = filtered.map(p => ({
+            date: new Date(p.time).toLocaleDateString(),
+            value: normalize(p.value),
+            ma20: normalize(p.ma20),
+            ma60: normalize(p.ma60),
+            originalValue: p.value,
+            time: p.time
+        }));
+
+        // 4. Calculate Signals (based on LATEST data)
+        const last = withIndicators[withIndicators.length - 1];
+        // Support/Resistance (Last 60 days)
+        const last60 = withIndicators.slice(-60);
+        const max60 = Math.max(...last60.map(d => d.value));
+        const min60 = Math.min(...last60.map(d => d.value));
+
+        const currentNav = last.value;
+        const distToSupport = ((currentNav - min60) / min60 * 100).toFixed(1);
+        const distToResist = ((currentNav - max60) / max60 * 100).toFixed(1);
+
+        // Trend
+        const isBullish = last.ma20 && last.ma60 && last.ma20 > last.ma60;
+        const trend = isBullish ? 'Bullish (看多)' : 'Bearish (看空)';
+
+        return {
+            processedData: finalData,
+            signals: {
+                trend,
+                isBullish,
+                support: min60,
+                resistance: max60,
+                normSupport: normalize(min60),
+                normResistance: normalize(max60),
+                distToSupport, // "2.5" means 2.5% above support
+                distToResist,  // "-5.0" means 5% below resistance
+                currentNav
+            }
+        };
     };
 
-    const chartData = history ? processData(history.acTrend, range) : [];
+    const { processedData: chartData, signals } = history ? processData(history.acTrend, range) : { processedData: [], signals: null };
     const chartColor = "#3b82f6";
 
     return (
@@ -91,7 +149,7 @@ export function FundPerspective({ fund, onClose }) {
         }} onClick={onClose}>
             <div
                 className="card"
-                style={{ width: '100%', maxWidth: '900px', height: '85vh', display: 'flex', flexDirection: 'column', backgroundColor: '#1e293b', border: '1px solid #334155', padding: '0' }}
+                style={{ width: '100%', maxWidth: '900px', height: '90vh', display: 'flex', flexDirection: 'column', backgroundColor: '#1e293b', border: '1px solid #334155', padding: '0' }}
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header */}
@@ -119,7 +177,7 @@ export function FundPerspective({ fund, onClose }) {
                                     cursor: 'pointer'
                                 }}
                             >
-                                走势
+                                决策
                             </button>
                             <button
                                 onClick={() => setActiveTab('holdings')}
@@ -147,8 +205,55 @@ export function FundPerspective({ fund, onClose }) {
                 <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     {activeTab === 'trend' ? (
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px' }}>
+
+                            {/* 💡 Signal Panel */}
+                            {signals && (
+                                <div style={{
+                                    display: 'flex', gap: '12px', marginBottom: '16px',
+                                    background: '#0f172a', padding: '12px', borderRadius: '8px',
+                                    borderLeft: `4px solid ${signals.isBullish ? '#22c55e' : '#ef4444'}`
+                                }}>
+                                    {/* Trend Block */}
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ color: '#94a3b8', fontSize: '12px' }}>趋势信号</div>
+                                        <div style={{ color: signals.isBullish ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                                            {signals.isBullish ? '📈 多头排列 (金叉/向上)' : '📉 空头排列 (死叉/向下)'}
+                                        </div>
+                                    </div>
+
+                                    {/* Support Block */}
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ color: '#94a3b8', fontSize: '12px' }}>支撑位 (Low 60d)</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <span style={{ color: '#f8fafc', fontWeight: 500 }}>{signals.support}</span>
+                                            <span style={{
+                                                fontSize: '11px',
+                                                padding: '2px 6px', borderRadius: '4px',
+                                                background: parseFloat(signals.distToSupport) < 3 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(148, 163, 184, 0.2)',
+                                                color: parseFloat(signals.distToSupport) < 3 ? '#22c55e' : '#94a3b8'
+                                            }}>
+                                                距支撑 +{signals.distToSupport}%
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Advice Block */}
+                                    <div style={{ flex: 1.5, borderLeft: '1px solid #334155', paddingLeft: '12px' }}>
+                                        <div style={{ color: '#94a3b8', fontSize: '12px' }}>智能操作建议</div>
+                                        <div style={{ color: '#f8fafc', fontSize: '13px' }}>
+                                            {parseFloat(signals.distToSupport) < 2
+                                                ? <span style={{ color: '#22c55e' }}>🟢 接近支撑位，建议分批买入 (Low Risk)</span>
+                                                : (parseFloat(signals.distToResist) > -2
+                                                    ? <span style={{ color: '#ef4444' }}>🔴 接近压力位，建议止盈/减仓</span>
+                                                    : <span style={{ color: '#94a3b8' }}>⚪ 趋势中继，持有观望</span>)
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Controls */}
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '10px' }}>
                                 {['7d', '1m', '3m', '6m', '1y', 'all'].map(r => (
                                     <button
                                         key={r}
@@ -194,12 +299,18 @@ export function FundPerspective({ fund, onClose }) {
                                                 tick={{ fill: '#94a3b8', fontSize: 10 }}
                                                 stroke="#334155"
                                                 tickFormatter={(val) => `${val}%`}
+                                                domain={['auto', 'auto']}
                                             />
                                             <Tooltip
                                                 contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
                                                 itemStyle={{ color: '#f8fafc' }}
-                                                formatter={(val) => [`${val}%`, '收益率']}
                                                 labelStyle={{ color: '#94a3b8', marginBottom: '4px' }}
+                                                formatter={(val, name) => {
+                                                    if (name === 'value') return [`${val}%`, '收益率'];
+                                                    if (name === 'ma20') return [`${val}%`, 'MA20'];
+                                                    if (name === 'ma60') return [`${val}%`, 'MA60'];
+                                                    return [val, name];
+                                                }}
                                             />
                                             <Area
                                                 type="monotone"
@@ -208,7 +319,40 @@ export function FundPerspective({ fund, onClose }) {
                                                 fillOpacity={1}
                                                 fill="url(#colorValue)"
                                                 strokeWidth={2}
+                                                name="value"
                                             />
+                                            <Line
+                                                type="monotone"
+                                                dataKey="ma20"
+                                                stroke="#fbbf24"
+                                                strokeWidth={1}
+                                                dot={false}
+                                                name="ma20"
+                                            />
+                                            <Line
+                                                type="monotone"
+                                                dataKey="ma60"
+                                                stroke="#a855f7"
+                                                strokeWidth={1}
+                                                dot={false}
+                                                name="ma60"
+                                            />
+                                            {signals && chartData.length > 0 && (
+                                                <>
+                                                    <ReferenceLine
+                                                        y={signals.normSupport}
+                                                        stroke="#22c55e"
+                                                        strokeDasharray="3 3"
+                                                        label={{ value: `支撑: ${signals.support}`, position: 'insideBottomLeft', fill: '#22c55e', fontSize: 10 }}
+                                                    />
+                                                    <ReferenceLine
+                                                        y={signals.normResistance}
+                                                        stroke="#ef4444"
+                                                        strokeDasharray="3 3"
+                                                        label={{ value: `压力: ${signals.resistance}`, position: 'insideTopLeft', fill: '#ef4444', fontSize: 10 }}
+                                                    />
+                                                </>
+                                            )}
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 )}
