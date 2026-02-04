@@ -7,7 +7,12 @@ export function FundPerspective({ fund, onClose }) {
     const [history, setHistory] = useState(null);
     const [loading, setLoading] = useState(true);
     const [range, setRange] = useState('3m'); // 7d, 1m, 3m, 6m, 1y, all
+    const [activeTab, setActiveTab] = useState('trend'); // trend, holdings
+    const [holdings, setHoldings] = useState([]);
+    const [quotes, setQuotes] = useState({});
+    const [holdingsLoading, setHoldingsLoading] = useState(false);
 
+    // Load History
     useEffect(() => {
         let mounted = true;
         const loadData = async () => {
@@ -22,10 +27,30 @@ export function FundPerspective({ fund, onClose }) {
         return () => { mounted = false; };
     }, [fund.code]);
 
-    // Filter and Normalize Data (Calculate Percentage Yield)
+    // Load Holdings when tab changes
+    useEffect(() => {
+        if (activeTab === 'holdings' && holdings.length === 0) {
+            const loadHoldings = async () => {
+                setHoldingsLoading(true);
+                const data = await fundApi.fetchFundHoldings(fund.code);
+                setHoldings(data);
+
+                // Fetch real-time quotes for these stocks
+                if (data && data.length > 0) {
+                    const codes = data.map(s => s.code);
+                    const qData = await fundApi.fetchStockQuotes(codes);
+                    setQuotes(qData);
+                }
+
+                setHoldingsLoading(false);
+            };
+            loadHoldings();
+        }
+    }, [activeTab, fund.code]);
+
+    // Data Processing for Chart
     const processData = (data, range) => {
         if (!data) return [];
-        const now = Date.now();
         const cutoff = new Date();
         switch (range) {
             case '7d': cutoff.setDate(cutoff.getDate() - 7); break;
@@ -35,12 +60,13 @@ export function FundPerspective({ fund, onClose }) {
             case '1y': cutoff.setFullYear(cutoff.getFullYear() - 1); break;
             default: // all
         }
+        if (range === 'all') cutoff.setFullYear(2000);
+
         const cutoffTime = cutoff.getTime();
         let filtered = data.filter(d => d.time >= cutoffTime);
 
-        if (filtered.length === 0) filtered = data.slice(-30);
+        if (filtered.length === 0 && data.length > 0) filtered = data.slice(-10);
 
-        // Normalize to percentage change
         if (filtered.length > 0) {
             const startValue = filtered[0].value;
             return filtered.map(p => ({
@@ -53,133 +79,183 @@ export function FundPerspective({ fund, onClose }) {
         return [];
     };
 
-    // Use Cumulative Trend (ACWorth)
     const chartData = history ? processData(history.acTrend, range) : [];
-
-    const isPositive = Number(fund.estChange) >= 0;
-    const ChangeIcon = isPositive ? TrendingUp : TrendingDown;
-    const colorClass = isPositive ? 'text-danger' : 'text-success';
-
-    // Determine chart color based on overall trend in current view? 
-    // Or just always use a neutral or theme color. 
-    // Let's use Red for general line if it's profitable, Green if loss? 
-    // Simpler: Use a bright Blue/Purple for the line to stand out against dark bg.
-    const chartColor = "#3b82f6"; // Blue-500
+    const chartColor = "#3b82f6";
 
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
+            backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: 'var(--spacing-4)'
+            zIndex: 1000, padding: '20px'
         }} onClick={onClose}>
             <div
                 className="card"
-                style={{ width: '100%', maxWidth: '800px', height: '90vh', maxHeight: '600px', display: 'flex', flexDirection: 'column', backgroundColor: '#1e1e1e' }}
+                style={{ width: '100%', maxWidth: '900px', height: '85vh', display: 'flex', flexDirection: 'column', backgroundColor: '#1e293b', border: '1px solid #334155', padding: '0' }}
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex-between" style={{ marginBottom: 'var(--spacing-4)', borderBottom: '1px solid #333', paddingBottom: 'var(--spacing-4)' }}>
+                <div className="flex-between" style={{ padding: '20px', borderBottom: '1px solid #334155' }}>
                     <div>
-                        <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'bold', color: '#fff' }}>{fund.name}</h2>
-                        <div className="flex-center" style={{ justifyContent: 'flex-start', gap: '8px', color: '#aaa' }}>
-                            <span className="badge" style={{ background: '#333', color: '#ccc' }}>{fund.code}</span>
-                            <span>NAV: <strong style={{ color: '#fff' }}>{fund.nav}</strong></span>
-                            <span>({fund.navDate})</span>
+                        <h2 style={{ margin: 0, color: '#f8fafc', fontSize: '1.25rem' }}>{fund.name}</h2>
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '4px', color: '#94a3b8', fontSize: '0.875rem' }}>
+                            <span>{fund.code}</span>
+                            <span>NAV: {fund.nav}</span>
                         </div>
                     </div>
-                    <button onClick={onClose} className="btn-secondary" style={{ padding: 'var(--spacing-2)', color: '#fff' }}>
-                        <X size={24} />
-                    </button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        {/* Tabs */}
+                        <div style={{ display: 'flex', backgroundColor: '#0f172a', padding: '4px', borderRadius: '8px' }}>
+                            <button
+                                onClick={() => setActiveTab('trend')}
+                                style={{
+                                    padding: '6px 16px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    background: activeTab === 'trend' ? '#3b82f6' : 'transparent',
+                                    color: activeTab === 'trend' ? 'white' : '#94a3b8',
+                                    fontWeight: 500,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                走势
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('holdings')}
+                                style={{
+                                    padding: '6px 16px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    background: activeTab === 'holdings' ? '#3b82f6' : 'transparent',
+                                    color: activeTab === 'holdings' ? 'white' : '#94a3b8',
+                                    fontWeight: 500,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                持仓
+                            </button>
+                        </div>
+
+                        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                            <X size={24} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Content */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', minHeight: 0 }}>
-                    {/* Current Status */}
-                    <div className="flex-between" style={{ padding: 'var(--spacing-4)', background: '#252525', borderRadius: 'var(--radius-lg)' }}>
-                        <div>
-                            <p className="text-secondary" style={{ color: '#888' }}>Real-time Estimate</p>
-                            <div className={`flex-center ${colorClass}`} style={{ justifyContent: 'flex-start', gap: '4px' }}>
-                                <ChangeIcon size={24} />
-                                <span style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold' }}>
-                                    {isPositive ? '+' : ''}{fund.estChange}%
-                                </span>
+                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    {activeTab === 'trend' ? (
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px' }}>
+                            {/* Controls */}
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '20px' }}>
+                                {['7d', '1m', '3m', '6m', '1y', 'all'].map(r => (
+                                    <button
+                                        key={r}
+                                        onClick={() => setRange(r)}
+                                        style={{
+                                            padding: '4px 12px',
+                                            borderRadius: '4px',
+                                            border: '1px solid ' + (range === r ? '#3b82f6' : '#334155'),
+                                            background: range === r ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                            color: range === r ? '#3b82f6' : '#94a3b8',
+                                            cursor: 'pointer',
+                                            fontSize: '12px'
+                                        }}
+                                    >
+                                        {r.toUpperCase()}
+                                    </button>
+                                ))}
                             </div>
-                            <p className="text-secondary" style={{ fontSize: 'var(--font-size-sm)', color: '#666' }}>{fund.estTime}</p>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <p className="text-secondary" style={{ color: '#888' }}>Valuation</p>
-                            <p style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'bold', color: '#fff' }}>{fund.valuation}</p>
-                        </div>
-                    </div>
 
-                    {/* Chart Controls */}
-                    <div className="flex-center" style={{ gap: '8px', background: '#252525', padding: '4px', borderRadius: 'var(--radius-md)' }}>
-                        {['7d', '1m', '3m', '6m', '1y', 'all'].map(r => (
-                            <button
-                                key={r}
-                                className={range === r ? 'btn' : 'btn-ghost'}
-                                style={{
-                                    padding: '4px 12px',
-                                    fontSize: '12px',
-                                    backgroundColor: range === r ? '#3b82f6' : 'transparent',
-                                    color: range === r ? '#fff' : '#aaa'
-                                }}
-                                onClick={() => setRange(r)}
-                            >
-                                {r.toUpperCase()}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Chart Area */}
-                    <div style={{ flex: 1, minHeight: '200px', width: '100%' }}>
-                        {loading ? (
-                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Loader className="spin" size={32} color="#3b82f6" />
+                            {/* Chart */}
+                            <div style={{ flex: 1, minHeight: 0 }}>
+                                {loading ? (
+                                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                                        <Loader className="spin" size={32} />
+                                    </div>
+                                ) : (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={chartData}>
+                                            <defs>
+                                                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor={chartColor} stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                            <XAxis
+                                                dataKey="date"
+                                                tick={{ fill: '#94a3b8', fontSize: 10 }}
+                                                stroke="#334155"
+                                                minTickGap={50}
+                                            />
+                                            <YAxis
+                                                tick={{ fill: '#94a3b8', fontSize: 10 }}
+                                                stroke="#334155"
+                                                tickFormatter={(val) => `${val}%`}
+                                            />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
+                                                itemStyle={{ color: '#f8fafc' }}
+                                                formatter={(val) => [`${val}%`, '收益率']}
+                                                labelStyle={{ color: '#94a3b8', marginBottom: '4px' }}
+                                            />
+                                            <Area
+                                                type="monotone"
+                                                dataKey="value"
+                                                stroke={chartColor}
+                                                fillOpacity={1}
+                                                fill="url(#colorValue)"
+                                                strokeWidth={2}
+                                            />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                )}
                             </div>
-                        ) : (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={chartData}>
-                                    <defs>
-                                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor={chartColor} stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                                    <XAxis
-                                        dataKey="date"
-                                        minTickGap={50}
-                                        tick={{ fill: '#888', fontSize: 10 }}
-                                        stroke="#333"
-                                    />
-                                    <YAxis
-                                        domain={['auto', 'auto']}
-                                        tick={{ fill: '#888', fontSize: 10 }}
-                                        stroke="#333"
-                                        width={40}
-                                        tickFormatter={(val) => `${val}%`}
-                                    />
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: '#1e1e1e', borderColor: '#333', borderRadius: '8px', color: '#fff' }}
-                                        itemStyle={{ color: '#fff' }}
-                                        labelStyle={{ color: '#888', marginBottom: '4px' }}
-                                        formatter={(val) => [`${val}%`, 'Return']}
-                                    />
-                                    {/* Reference line at 0% */}
-                                    <Area
-                                        type="monotone"
-                                        dataKey="value"
-                                        stroke={chartColor}
-                                        fillOpacity={1}
-                                        fill="url(#colorValue)"
-                                        strokeWidth={2}
-                                    />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        )}
-                    </div>
+                        </div>
+                    ) : (
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
+                            {holdingsLoading ? (
+                                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
+                            ) : (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', color: '#cbd5e1' }}>
+                                    <thead style={{ position: 'sticky', top: 0, background: '#1e293b', zIndex: 1 }}>
+                                        <tr style={{ borderBottom: '1px solid #334155' }}>
+                                            <th style={{ padding: '16px', textAlign: 'left', fontWeight: 500, color: '#94a3b8' }}>股票名称</th>
+                                            <th style={{ padding: '16px', textAlign: 'left', fontWeight: 500, color: '#94a3b8' }}>代码</th>
+                                            <th style={{ padding: '16px', textAlign: 'right', fontWeight: 500, color: '#94a3b8' }}>最新涨跌</th>
+                                            <th style={{ padding: '16px', textAlign: 'right', fontWeight: 500, color: '#94a3b8' }}>持仓占比</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {holdings.length > 0 ? holdings.map((stock, i) => {
+                                            const quote = quotes[stock.code];
+                                            const change = quote ? parseFloat(quote.change) : 0;
+                                            const changeColor = change > 0 ? '#ef4444' : (change < 0 ? '#22c55e' : '#94a3b8');
+
+                                            return (
+                                                <tr key={stock.code + i} style={{ borderBottom: '1px solid #334155' }}>
+                                                    <td style={{ padding: '16px', fontWeight: 500 }}>{stock.name}</td>
+                                                    <td style={{ padding: '16px', color: '#94a3b8', fontFamily: 'monospace' }}>{stock.code}</td>
+                                                    <td style={{ padding: '16px', textAlign: 'right', color: changeColor, fontWeight: 600 }}>
+                                                        {quote ? (change > 0 ? `+${change}%` : `${change}%`) : '--'}
+                                                    </td>
+                                                    <td style={{ padding: '16px', textAlign: 'right', color: '#cbd5e1', fontWeight: 500 }}>{stock.percent}%</td>
+                                                </tr>
+                                            );
+                                        }) : (
+                                            <tr>
+                                                <td colSpan="4" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                                                    暂无持仓数据
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

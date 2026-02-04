@@ -152,5 +152,231 @@ export const fundApi = {
             }
         }
         return results;
+    },
+
+    // Fetch analysis data (Drawdown, etc.) with caching
+    // Returns: { maxDrawdown: -15.2, yearHigh: 1.2345, lastUpdated: timestamp }
+    fetchAnalysisData: async (code) => {
+        const today = new Date().toISOString().split('T')[0];
+        const cacheKey = `fund_analysis_v2_${code}_${today}`;
+
+        try {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                return JSON.parse(cached);
+            }
+        } catch (e) {
+            // Ignore cache errors
+        }
+
+        // Fetch history if not cached
+        const history = await fundApi.fetchFundHistory(code);
+        if (!history || !history.acTrend || history.acTrend.length === 0) {
+            return null;
+        }
+
+        // Calculate 1 Year stats
+        // Default to all data if less than 1 year, or filter last 250 points roughly
+        const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000;
+        const recentData = history.acTrend.filter(pt => pt.time >= oneYearAgo);
+
+        if (recentData.length === 0) return null;
+
+        // --- 1. Drawdown Calculation ---
+        let yearHigh = -Infinity;
+        recentData.forEach(pt => {
+            if (pt.value > yearHigh) yearHigh = pt.value;
+        });
+
+        const currentVal = recentData[recentData.length - 1].value;
+        const drawdown = ((currentVal - yearHigh) / yearHigh) * 100;
+
+        // --- 2. RSI Calculation (14-day) ---
+        const rsi = fundApi.calculateRSI(recentData, 14);
+
+        // --- 3. Volatility Calculation (20-day StdDev of % changes) ---
+        const volatility = fundApi.calculateVolatility(recentData, 20);
+
+        const result = {
+            maxDrawdown: parseFloat(drawdown.toFixed(2)),
+            yearHigh: yearHigh,
+            currentVal: currentVal,
+            rsi: rsi !== null ? parseFloat(rsi.toFixed(1)) : null,
+            volatility: volatility !== null ? parseFloat(volatility.toFixed(2)) : null,
+            lastUpdated: Date.now()
+        };
+
+        try {
+            localStorage.setItem(cacheKey, JSON.stringify(result));
+            // Optional: Cleanup old keys? Maybe lazily.
+        } catch (e) { }
+
+        return result;
+    },
+
+    // --- Helper Algorithms ---
+    calculateRSI: (data, period = 14) => {
+        if (data.length < period + 1) return null;
+
+        // Use simple SMA method for robustness over short history slices
+        let gains = 0;
+        let losses = 0;
+
+        // Calculate initial RSI
+        for (let i = 1; i <= period; i++) {
+            const change = data[data.length - period - 1 + i].value - data[data.length - period - 1 + i - 1].value;
+            if (change > 0) gains += change;
+            else losses += Math.abs(change);
+        }
+
+        if (losses === 0) return 100;
+        if (gains === 0) return 0;
+
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        const rs = avgGain / avgLoss;
+        return 100 - (100 / (1 + rs));
+    },
+
+    calculateVolatility: (data, period = 20) => {
+        if (data.length < period + 1) return null;
+
+        const recent = data.slice(-period - 1);
+        const changes = [];
+        for (let i = 1; i < recent.length; i++) {
+            changes.push((recent[i].value - recent[i - 1].value) / recent[i - 1].value);
+        }
+
+        const mean = changes.reduce((a, b) => a + b, 0) / changes.length;
+        const variance = changes.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / changes.length;
+
+        // Annualized Volatility? Standard is usually daily sigma.
+        // Let's return Daily Sigma * 100 (percentage)
+        return Math.sqrt(variance) * 100;
+    },
+
+    // Fetch Top 10 Holdings (Stock Positions)
+    fetchFundHoldings: async (code) => {
+        try {
+            // Using the new proxy logic for FundArchivesDatas.aspx
+            const res = await fetch(`/api/f10/FundArchivesDatas.aspx?type=jjcc&code=${code}&topline=10`);
+            const text = await res.text();
+
+            // The response is a weird JS variable assignment: "var apidata={...}" or just HTML inside.
+            // Actually based on curl it returns HTML directly inside document.write or similar?
+            // Wait, the curl output was: "var apidata = { content: '...<table>...</table>', ... }"
+            // Or directly HTML?
+            // The curl output showed: "<div class='box'>...<table>...</table>"
+            // Wait, the curl output I saw earlier (step 648) was pure HTML content starting with regex matching.
+            // Let's assume it returns the HTML snippet directly or inside a JS string.
+            // Actually the browser usually loads this via script tag.
+            // If we fetch it as text, we might get `var apidata = { content:"...", ... }`
+            // Let's rely on Regex to find the table rows.
+
+            const stocks = [];
+
+            // Regex to find stock rows: 
+            // <td><a href='...'>688981</a></td><td class='tol'><a href='...'>中芯国际</a>...<td class='tor'>9.15%</td>
+            // We need 1. Code, 2. Name, 3. Percent
+
+            // Matches: href='...'>Code</a> ... >Name</a> ... >Percent%</td>
+            const rowRegex = /href='[^']*'>(\d{6})<\/a>.*?<td class='tol'><a href='[^']*'>([^<]+)<\/a>.*?<td class='tor'>([\d\.]+)%<\/td>/g;
+
+            let match;
+            while ((match = rowRegex.exec(text)) !== null) {
+                stocks.push({
+                    code: match[1],
+                    name: match[2],
+                    percent: parseFloat(match[3])
+                });
+            }
+
+            // Limit to top 10 just in case
+            return stocks.slice(0, 10);
+        } catch (e) {
+            console.error('Failed to fetch holdings', e);
+            return [];
+        }
+    },
+
+    // Batch fetch analysis
+    // Batch fetch analysis
+    getBatchAnalysis: async (codes) => {
+        // Process in chunks of 5 to avoid overwhelming
+        const results = {};
+        for (let i = 0; i < codes.length; i += 5) {
+            const chunk = codes.slice(i, i + 5);
+            const chunkResults = await Promise.all(chunk.map(code => fundApi.fetchAnalysisData(code)));
+            chunk.forEach((code, idx) => {
+                if (chunkResults[idx]) {
+                    results[code] = chunkResults[idx];
+                }
+            });
+            // Small delay
+            if (i + 5 < codes.length) await new Promise(r => setTimeout(r, 100));
+        }
+        return results;
+    },
+
+    // Fetch Real-time Stock Quotes (Sina API)
+    fetchStockQuotes: async (codes) => {
+        if (!codes || codes.length === 0) return {};
+
+        // 1. Convert to Sina format
+        // 6xxxxx -> sh6xxxxx
+        // 0xxxxx -> sz0xxxxx
+        // 3xxxxx -> sz3xxxxx
+        // 8xxxxx -> bj8xxxxx
+        // 4xxxxx -> bj4xxxxx
+        const sinaCodes = codes.map(c => {
+            if (c.startsWith('6')) return `sh${c}`;
+            if (c.startsWith('0')) return `sz${c}`;
+            if (c.startsWith('3')) return `sz${c}`;
+            if (c.startsWith('8')) return `bj${c}`;
+            if (c.startsWith('4')) return `bj${c}`;
+            return `sz${c}`;
+        });
+
+        try {
+            // Call proxy: /api/stock?list=sh600519,sz000001
+            const listParam = sinaCodes.join(',');
+            const res = await fetch(`/api/stock?list=${listParam}`);
+            const text = await res.text();
+
+            // Parse response: var hq_str_sh600519="Moutai,1500.00,1499.00,1501.00,...";
+            const map = {};
+
+            sinaCodes.forEach((sc, idx) => {
+                const originalCode = codes[idx];
+                const match = text.match(new RegExp(`var hq_str_${sc}="([^"]+)";`));
+                if (match && match[1]) {
+                    const parts = match[1].split(',');
+                    if (parts.length > 3) {
+                        const name = parts[0];
+                        const prevClose = parseFloat(parts[2]);
+                        const current = parseFloat(parts[3]);
+
+                        let change = 0;
+                        if (prevClose > 0 && current > 0) {
+                            change = ((current - prevClose) / prevClose) * 100;
+                        }
+
+                        // If suspended or no data, current might be 0
+                        if (current === 0) change = 0;
+
+                        map[originalCode] = {
+                            name: name,
+                            price: current,
+                            change: parseFloat(change.toFixed(2))
+                        };
+                    }
+                }
+            });
+
+            return map;
+        } catch (e) {
+            console.error('Failed to fetch stock quotes', e);
+            return {};
+        }
     }
 };

@@ -25,12 +25,28 @@ export default defineConfig({
           'Referer': 'http://fund.eastmoney.com/'
         }
       },
+      '/api/f10/FundArchivesDatas.aspx': {
+        target: 'http://fundf10.eastmoney.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/f10/, ''),
+        headers: {
+          'Referer': 'http://fund.eastmoney.com/'
+        }
+      },
       '/api/f10': {
         target: 'http://api.fund.eastmoney.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/f10/, '/f10'),
         headers: {
           'Referer': 'http://fund.eastmoney.com/'
+        }
+      },
+      '/api/stock': {
+        target: 'http://hq.sinajs.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/stock/, ''),
+        headers: {
+          'Referer': 'https://finance.sina.com.cn/'
         }
       },
     },

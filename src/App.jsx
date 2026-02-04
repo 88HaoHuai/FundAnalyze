@@ -152,30 +152,46 @@ function App() {
   // Sync selected fund with latest data
   const activeFundData = selectedFund ? funds.find(f => f.code === selectedFund.code) || selectedFund : null;
 
-  // Additional state for Previous Day Changes
+  // Additional state for Previous Day Changes and Analysis (Drawdown)
   const [prevChanges, setPrevChanges] = useState({});
+  const [analysisData, setAnalysisData] = useState({});
 
-  // Fetch previous day changes once we have funds
+  // Fetch previous day changes & Analysis once we have funds
   useEffect(() => {
-    // Avoid fetching if already have data for most funds
     if (funds.length === 0) return;
 
     const missingCodes = funds
       .map(f => f.code)
       .filter(code => prevChanges[code] === undefined);
 
-    if (missingCodes.length === 0) return;
+    // Fetch Prev Day Change
+    if (missingCodes.length > 0) {
+      const fetchPrev = async () => {
+        const results = await fundApi.getBatchPreviousDayChange(missingCodes);
+        setPrevChanges(prev => {
+          const next = { ...prev };
+          results.forEach(r => { next[r.code] = r; });
+          return next;
+        });
+      };
+      fetchPrev();
+    }
 
-    const fetchPrev = async () => {
-      const results = await fundApi.getBatchPreviousDayChange(missingCodes);
-      setPrevChanges(prev => {
-        const next = { ...prev };
-        results.forEach(r => { next[r.code] = r; });
-        return next;
-      });
-    };
+    // Fetch Analysis (Drawdown) - Check if we are missing analysis for any visible funds
+    // Optimization: Only fetch for active group first? Or just all sequentially.
+    // Let's fetch all missing ones.
+    const missingAnalysis = funds
+      .map(f => f.code)
+      .filter(code => analysisData[code] === undefined);
 
-    fetchPrev();
+    if (missingAnalysis.length > 0) {
+      const fetchAnalysis = async () => {
+        const results = await fundApi.getBatchAnalysis(missingAnalysis);
+        setAnalysisData(prev => ({ ...prev, ...results }));
+      };
+      fetchAnalysis();
+    }
+
   }, [funds.length]); // Depend on funds length to trigger when new funds added
 
   // Filter funds for current tab
@@ -238,12 +254,32 @@ function App() {
                     key={fund.code}
                     fund={fund}
                     prevChange={prevChanges[fund.code]}
+                    analysis={analysisData[fund.code]}
                     onRemove={() => handleRemove(fund.code)}
                     onOpenPerspective={() => setSelectedFund(fund)}
                   />
                 ))}
               </>
             )}
+          </div>
+
+          {/* Legend / Help Text */}
+          <div style={{
+            marginTop: '20px',
+            padding: '10px',
+            borderRadius: '8px',
+            backgroundColor: '#1e293b',
+            border: '1px solid #334155',
+            fontSize: '11px',
+            color: '#94a3b8',
+            display: 'flex',
+            gap: '16px',
+            flexWrap: 'wrap'
+          }}>
+            <span>🔥 <b>RSI{'>'}70 (过热)</b>: 追高风险</span>
+            <span>❄️ <b>RSI{'<'}30 (冰点)</b>: 反弹机会</span>
+            <span>🌪️ <b>High Vol</b>: 剧烈波动</span>
+            <span>RSI算法: 14日相对强弱指标</span>
           </div>
         </div>
       </main>
@@ -260,7 +296,7 @@ function App() {
         />
       )}
     </div>
-  )
+  );
 }
 
 export default App

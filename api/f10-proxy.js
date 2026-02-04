@@ -4,11 +4,21 @@ export default async function handler(req, res) {
     const { fundCode, pageIndex, pageSize } = req.query;
 
     const queryParams = new URLSearchParams();
-    if (fundCode) queryParams.append('fundCode', fundCode);
-    if (pageIndex) queryParams.append('pageIndex', pageIndex);
-    if (pageSize) queryParams.append('pageSize', pageSize);
+    // Forward all known interesting params
+    const allowedParams = ['fundCode', 'pageIndex', 'pageSize', 'type', 'code', 'topline', 'deviceid'];
+    for (const key of Object.keys(req.query)) {
+        if (allowedParams.includes(key)) {
+            queryParams.append(key, req.query[key]);
+        }
+    }
 
-    const targetUrl = `http://api.fund.eastmoney.com/f10/${path}?${queryParams.toString()}`;
+    let targetUrl;
+    // Special handling for legacy ASPX pages (Holdings, etc)
+    if (path === 'FundArchivesDatas.aspx') {
+        targetUrl = `http://fundf10.eastmoney.com/FundArchivesDatas.aspx?${queryParams.toString()}`;
+    } else {
+        targetUrl = `http://api.fund.eastmoney.com/f10/${path}?${queryParams.toString()}`;
+    }
 
     try {
         const response = await fetch(targetUrl, {
