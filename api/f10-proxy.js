@@ -32,9 +32,17 @@ export default async function handler(req, res) {
             return res.status(response.status).send(`Failed to fetch: ${response.statusText}`);
         }
 
-        const data = await response.json();
         // Cache for 10 minutes
         res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate');
+
+        // Handle text/html for legacy ASPX pages
+        if (path === 'FundArchivesDatas.aspx') {
+            const text = await response.text();
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            return res.status(200).send(text);
+        }
+
+        const data = await response.json();
         res.status(200).json(data);
     } catch (error) {
         console.error('Proxy error:', error);

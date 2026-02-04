@@ -11,6 +11,10 @@
         {
             "source": "/api/f10/:match*",
             "destination": "/api/f10-proxy?path=:match*"
+        },
+        {
+            "source": "/api/stock",
+            "destination": "/api/stock-proxy"
         }
     ]
 }
