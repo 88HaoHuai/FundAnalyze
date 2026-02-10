@@ -318,6 +318,58 @@ export const fundApi = {
         return results;
     },
 
+    // Get Market Compass Data (Trend vs Position)
+    getMarketCompassData: async (codes) => {
+        // Process in chunks
+        const results = [];
+        for (let i = 0; i < codes.length; i += 5) {
+            const chunk = codes.slice(i, i + 5);
+            // We need history to calculate trend and position
+            const chunkPromises = chunk.map(code => fundApi.fetchFundHistory(code).then(hist => ({ code, hist })));
+            const chunkResults = await Promise.all(chunkPromises);
+
+            chunkResults.forEach(({ code, hist }) => {
+                if (!hist || !hist.acTrend || hist.acTrend.length < 20) return;
+
+                const data = hist.acTrend; // [[time, value], ...]
+                const current = data[data.length - 1].value;
+
+                // 1. Calculate X-Axis: Trend (20-day Return)
+                // If distinct dates are less than 20, use available
+                const trendDays = Math.min(20, data.length - 1);
+                const prev20 = data[data.length - 1 - trendDays].value;
+                const trend = ((current - prev20) / prev20) * 100; // Percentage
+
+                // 2. Calculate Y-Axis: Position (Yearly Percentile)
+                const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000;
+                const yearData = data.filter(pt => pt.time >= oneYearAgo);
+                let high = -Infinity;
+                let low = Infinity;
+                yearData.forEach(pt => {
+                    if (pt.value > high) high = pt.value;
+                    if (pt.value < low) low = pt.value;
+                });
+
+                let position = 0;
+                if (high > low) {
+                    position = ((current - low) / (high - low)) * 100; // 0-100 score
+                }
+
+                results.push({
+                    code,
+                    trend: parseFloat(trend.toFixed(2)),
+                    position: parseFloat(position.toFixed(2)),
+                    current,
+                    high,
+                    low
+                });
+            });
+
+            if (i + 5 < codes.length) await new Promise(r => setTimeout(r, 100));
+        }
+        return results;
+    },
+
     // Fetch Real-time Stock Quotes (Tencent/Gtimg API)
     fetchStockQuotes: async (codes) => {
         if (!codes || codes.length === 0) return {};
