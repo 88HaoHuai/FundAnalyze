@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ReferenceLine, Label } from 'recharts';
+import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ReferenceLine } from 'recharts';
 import { fundApi } from '../services/fundApi';
 import { Loader, Info } from 'lucide-react';
 
-export function MarketCompass({ funds }) {
+export function MarketCompass({ funds, shortNames = {} }) {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -15,17 +15,18 @@ export function MarketCompass({ funds }) {
                 // 1. Fetch Compass Data (Trend, Position)
                 const compassData = await fundApi.getMarketCompassData(funds);
 
-                // 2. Fetch Names for better display (since getMarketCompassData only has codes)
-                // Actually we can optimize this by passing names if available, but let's fetch info to be safe
-                // or just fetch info for all.
-                // Let's iterate and fetch info to get the name.
+                // 2. enrich with names
                 const enrichedData = await Promise.all(compassData.map(async (item) => {
-                    try {
-                        const info = await fundApi.fetchFundInfo(item.code);
-                        return { ...item, name: info.name };
-                    } catch (e) {
-                        return { ...item, name: item.code };
+                    let displayName = shortNames[item.code];
+                    if (!displayName) {
+                        try {
+                            const info = await fundApi.fetchFundInfo(item.code);
+                            displayName = info.name;
+                        } catch (e) {
+                            displayName = item.code;
+                        }
                     }
+                    return { ...item, name: displayName };
                 }));
 
                 setData(enrichedData);
@@ -37,7 +38,7 @@ export function MarketCompass({ funds }) {
         };
 
         loadData();
-    }, [funds]);
+    }, [funds, shortNames]);
 
     if (loading) {
         return (
@@ -133,7 +134,8 @@ export function MarketCompass({ funds }) {
                             {data.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={getColor(entry.trend, entry.position)} />
                             ))}
-                            <LabelList dataKey="name" position="top" style={{ fill: '#f8fafc', fontSize: '10px' }} />
+                            {/* Use Custom Label List */}
+                            <LabelList dataKey="name" content={<CustomLabel />} />
                         </Scatter>
                     </ScatterChart>
                 </ResponsiveContainer>
@@ -157,27 +159,27 @@ export function MarketCompass({ funds }) {
 }
 
 // Custom Label Component for Scatter
-const LabelList = (props) => {
-    const { data, dataKey } = props;
-    if (!data) return null;
+const CustomLabel = (props) => {
+    const { x, y, value } = props;
     return (
-        <g>
-            {data.map((entry, index) => {
-                const x = props.xAxis.scale(entry.trend);
-                const y = props.yAxis.scale(entry.position);
-                return (
-                    <text
-                        key={index}
-                        x={x}
-                        y={y - 10}
-                        fill="#f8fafc"
-                        textAnchor="middle"
-                        fontSize="10px"
-                    >
-                        {entry[dataKey]}
-                    </text>
-                );
-            })}
-        </g>
+        <text
+            x={x}
+            y={y - 12}
+            fill="#fff"
+            textAnchor="middle"
+            fontSize="12px"
+            fontWeight="bold"
+            style={{
+                textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.5))'
+            }}
+        >
+            {value}
+        </text>
     );
 };
+
+// Recharts LabelList expects data or dataKey. 
+// If we use 'content' prop, we don't strictly need Recharts' LabelList mapping, 
+// but it's easier to use <LabelList dataKey="name" content={<CustomLabel />} />
+import { LabelList } from 'recharts';

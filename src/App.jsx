@@ -205,9 +205,8 @@ function App() {
 
           <FundSearch onAddFund={handleAddFund} existingCodes={activeGroup?.codes || []} />
 
-          {/* Market Analysis View */}
           {activeGroup?.isMarket && (
-            <MarketCompass funds={activeGroup.codes} />
+            <MarketCompass funds={activeGroup.codes} shortNames={activeGroup.shortNames} />
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
