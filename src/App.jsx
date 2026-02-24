@@ -183,9 +183,19 @@ function App() {
         <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'bold' }}>
           Fund<span style={{ color: 'var(--color-accent)' }}>Tracker</span>
         </h1>
-        <button className="btn btn-secondary" onClick={() => setShowManager(true)}>
-          Settings
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-secondary" onClick={() => {
+            if (window.confirm('是否确定清除本地缓存？这会重置为默认分组配置。')) {
+              localStorage.removeItem('fundTrackerGroups');
+              window.location.reload();
+            }
+          }}>
+            清除缓存
+          </button>
+          <button className="btn btn-secondary" onClick={() => setShowManager(true)}>
+            Settings
+          </button>
+        </div>
       </header>
 
       <main>
