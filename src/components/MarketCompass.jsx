@@ -15,18 +15,11 @@ export function MarketCompass({ funds, shortNames = {} }) {
                 // 1. Fetch Compass Data (Trend, Position)
                 const compassData = await fundApi.getMarketCompassData(funds);
 
-                // 2. enrich with names
-                const enrichedData = await Promise.all(compassData.map(async (item) => {
-                    let displayName = shortNames[item.code];
-                    if (!displayName) {
-                        try {
-                            const info = await fundApi.fetchFundInfo(item.code);
-                            displayName = info.name;
-                        } catch (e) {
-                            displayName = item.code;
-                        }
-                    }
-                    return { ...item, name: displayName };
+                // 2. enrich with names, only keep those present in shortNames
+                const validItems = compassData.filter(item => shortNames[item.code]);
+                const enrichedData = validItems.map((item) => ({
+                    ...item,
+                    name: shortNames[item.code]
                 }));
 
                 setData(enrichedData);
