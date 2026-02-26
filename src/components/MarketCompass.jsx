@@ -15,14 +15,31 @@ export function MarketCompass({ funds, shortNames = {} }) {
                 // 1. Fetch Compass Data (Trend, Position)
                 const compassData = await fundApi.getMarketCompassData(funds);
 
-                // 2. enrich with names, only keep those present in shortNames
+                // 2. enrich with names and sort
                 const validItems = compassData.filter(item => shortNames[item.code]);
-                const enrichedData = validItems.map((item) => ({
+
+                const getSortValue = (trend, pos) => {
+                    if (trend > 0 && pos < 50) return 1; // 底部反转优先
+                    if (trend > 0 && pos >= 50) return 2; // 高景气其次
+                    if (trend <= 0 && pos >= 50) return 3; // 顶部风险再次
+                    return 4; // 弱势整理最后
+                };
+
+                const sortedData = validItems.map((item) => ({
                     ...item,
-                    name: shortNames[item.code]
+                    name: shortNames[item.code],
+                    quadValue: getSortValue(item.trend, item.position)
+                })).sort((a, b) => {
+                    if (a.quadValue !== b.quadValue) return a.quadValue - b.quadValue;
+                    return b.trend - a.trend; // 同象限内按趋势强度降序
+                });
+
+                const finalData = sortedData.map((item, index) => ({
+                    ...item,
+                    seq: index + 1 // 给入唯一排序序号
                 }));
 
-                setData(enrichedData);
+                setData(finalData);
             } catch (e) {
                 console.error("Failed to load compass data", e);
             } finally {
@@ -56,6 +73,13 @@ export function MarketCompass({ funds, shortNames = {} }) {
         if (trend > 0 && pos >= 50) return COLORS.q1; // Momentum
         if (trend <= 0 && pos >= 50) return COLORS.q2; // Correction
         return COLORS.q3; // Weak
+    };
+
+    const getQuadName = (trend, pos) => {
+        if (trend > 0 && pos < 50) return '底部反转';
+        if (trend > 0 && pos >= 50) return '高景气';
+        if (trend <= 0 && pos >= 50) return '顶部风险';
+        return '弱势整理';
     };
 
     return (
@@ -121,14 +145,20 @@ export function MarketCompass({ funds, shortNames = {} }) {
                                 if (name === '估值水位') return [`${value}%`, name];
                                 return [value, name];
                             }}
-                            labelFormatter={() => ''}
+                            labelFormatter={(_label, payload) => {
+                                if (payload && payload.length > 0) {
+                                    const dataItem = payload[0].payload;
+                                    return `[${dataItem.seq}] ${dataItem.name}`;
+                                }
+                                return _label;
+                            }}
                         />
                         <Scatter name="Sectors" data={data} fill="#8884d8">
                             {data.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={getColor(entry.trend, entry.position)} />
                             ))}
-                            {/* Use Custom Label List */}
-                            <LabelList dataKey="name" content={<CustomLabel />} />
+                            {/* Use Custom Label List mapped to seq */}
+                            <LabelList dataKey="seq" content={<CustomLabel />} />
                         </Scatter>
                     </ScatterChart>
                 </ResponsiveContainer>
@@ -146,6 +176,43 @@ export function MarketCompass({ funds, shortNames = {} }) {
                         </ul>
                     </div>
                 </div>
+            </div>
+
+            {/* List Table */}
+            <div style={{ marginTop: '24px', maxHeight: '400px', overflowY: 'auto', borderRadius: '8px', border: '1px solid #334155' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', color: '#e2e8f0' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: '#1e293b', zIndex: 1 }}>
+                        <tr>
+                            <th style={{ padding: '10px 12px', borderBottom: '1px solid #334155', textAlign: 'center', width: '60px' }}>序号</th>
+                            <th style={{ padding: '10px 12px', borderBottom: '1px solid #334155', textAlign: 'left' }}>板块名称</th>
+                            <th style={{ padding: '10px 12px', borderBottom: '1px solid #334155', textAlign: 'right' }}>趋势强度</th>
+                            <th style={{ padding: '10px 12px', borderBottom: '1px solid #334155', textAlign: 'right' }}>估值水位</th>
+                            <th style={{ padding: '10px 12px', borderBottom: '1px solid #334155', textAlign: 'center' }}>策略状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {data.map(item => (
+                            <tr key={item.code} style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.5)' }}>
+                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#94a3b8', fontWeight: 'bold' }}>{item.seq}</td>
+                                <td style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 'bold' }}>{item.name}</td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right', color: item.trend > 0 ? '#ef4444' : '#22c55e' }}>{item.trend}%</td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right' }}>{item.position}%</td>
+                                <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                    <span style={{
+                                        padding: '4px 8px',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        background: `${getColor(item.trend, item.position)}22`,
+                                        color: getColor(item.trend, item.position),
+                                        border: `1px solid ${getColor(item.trend, item.position)}44`
+                                    }}>
+                                        {getQuadName(item.trend, item.position)}
+                                    </span>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </div>
     );
