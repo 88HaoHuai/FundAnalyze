@@ -1,6 +1,6 @@
 import { TrendingUp, TrendingDown, PieChart } from 'lucide-react';
 
-export function FundCard({ fund, prevChange, analysis, onRemove, onOpenPerspective }) {
+export function FundCard({ fund, industryLabel, prevChange, analysis, onRemove, onOpenPerspective }) {
     const isPositive = Number(fund.estChange) >= 0;
     const ChangeIcon = isPositive ? TrendingUp : TrendingDown;
     const colorClass = isPositive ? 'text-danger' : 'text-success'; // Red Up, Green Down
@@ -23,6 +23,19 @@ export function FundCard({ fund, prevChange, analysis, onRemove, onOpenPerspecti
                     }}>
                         {(fund.code.startsWith('51') || fund.code.startsWith('15')) ? '场内' : '场外'}
                     </span>
+
+                    {industryLabel && (
+                        <span style={{
+                            fontSize: '10px',
+                            padding: '1px 4px',
+                            borderRadius: '3px',
+                            backgroundColor: '#8b5cf6',
+                            color: 'white',
+                            fontWeight: 600
+                        }}>
+                            {industryLabel}
+                        </span>
+                    )}
 
                     {/* Drawdown */}
                     {analysis && (

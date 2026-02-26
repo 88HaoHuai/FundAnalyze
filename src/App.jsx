@@ -239,6 +239,7 @@ function App() {
                   <FundCard
                     key={fund.code}
                     fund={fund}
+                    industryLabel={activeGroup?.shortNames?.[fund.code]}
                     prevChange={prevChanges[fund.code]}
                     analysis={analysisData[fund.code]}
                     onRemove={() => handleRemove(fund.code)}
