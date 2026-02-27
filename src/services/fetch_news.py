@@ -2,33 +2,36 @@ import sys
 import json
 import requests
 
+import akshare as ak
+
 def fetch_and_filter_news(keyword):
     try:
-        api_url = "https://np-anotice-stock.eastmoney.com/api/security/ann?page_size=50&page_index=1&ann_type=A"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        res = requests.get(api_url, headers=headers, timeout=5)
-        data_json = res.json()
+        # Default fallback keyword if nothing provided
+        search_kw = keyword if keyword else "A股"
+        
+        # Use akshare's real financial news API
+        df = ak.stock_news_em(symbol=search_kw)
         
         result = []
-        if data_json and 'data' in data_json and 'list' in data_json['data']:
-            for item in data_json['data']['list']:
-                title = str(item.get('title', ''))
-                content = title
-                show_time = str(item.get('notice_date', ''))[:16]
-                
-                if keyword:
-                    if keyword.lower() not in title.lower():
-                        continue
-                
-                result.append({
-                    'time': show_time,
-                    'title': "行情资讯",
-                    'content': content
-                })
-                if len(result) >= 50:
-                    break
+        if not df.empty:
+            # Sort by time just in case, though it usually comes sorted
+            df = df.sort_values(by='发布时间', ascending=False)
+            
+            # Take top 30 news
+            for _, row in df.head(30).iterrows():
+                try:
+                    title = str(row['新闻标题'])
+                    content = str(row['新闻内容'])
+                    show_time = str(row['发布时间'])[:16] # "2026-02-27 13:14"
+                    
+                    result.append({
+                        'time': show_time,
+                        'title': title,
+                        'content': content
+                    })
+                except Exception as loop_e:
+                    continue
+                    
         print(json.dumps({'success': True, 'data': result}, ensure_ascii=False))
     except Exception as e:
         print(json.dumps({'success': False, 'error': str(e)}, ensure_ascii=False))

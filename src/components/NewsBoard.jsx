@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
 import { fundApi } from '../services/fundApi';
 import { Loader, Search, RefreshCw, Clock, AlertCircle, Sparkles, TrendingUp, TrendingDown, Minus, Target } from 'lucide-react';
+import fundsConfig from '../config/funds.json';
 
 export function NewsBoard() {
     const [news, setNews] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [keyword, setKeyword] = useState('');
+    const [keyword, setKeyword] = useState('A股');
     const [searchInput, setSearchInput] = useState('');
     const [error, setError] = useState(null);
     const [aiStatus, setAiStatus] = useState({}); // { [idx]: { loading: boolean, data: null | {sentiment, score, summary, impact} } }
 
-    const loadNews = async (searchKw = '') => {
+    // Parse market fund names for quick chips
+    const marketFunds = fundsConfig.find(item => item.isMarket === true);
+    const quickSectors = marketFunds && marketFunds.shortNames ? Object.values(marketFunds.shortNames).filter(n => n !== '沪深300' && n !== '上证50' && n !== '恒生指数' && n !== '红利低波') : [];
+
+    const loadNews = async (searchKw = 'A股') => {
         setLoading(true);
         setError(null);
         try {
@@ -30,8 +35,15 @@ export function NewsBoard() {
 
     const handleSearch = (e) => {
         e.preventDefault();
-        setKeyword(searchInput);
-        loadNews(searchInput);
+        const kw = searchInput || 'A股';
+        setKeyword(kw);
+        loadNews(kw);
+    };
+
+    const handleChipClick = (sector) => {
+        setSearchInput(sector);
+        setKeyword(sector);
+        loadNews(sector);
     };
 
     const handleAITrigger = async (idx, item) => {
@@ -96,6 +108,47 @@ export function NewsBoard() {
                         <RefreshCw size={16} className={loading ? 'spin' : ''} />
                     </button>
                 </div>
+            </div>
+
+            {/* Quick Keyword Chips */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px' }}>
+                <button
+                    onClick={() => handleChipClick('A股')}
+                    style={{
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        border: '1px solid',
+                        borderColor: keyword === 'A股' ? '#4f46e5' : '#334155',
+                        background: keyword === 'A股' ? 'rgba(79, 70, 229, 0.2)' : '#1e293b',
+                        color: keyword === 'A股' ? '#c7d2fe' : '#94a3b8',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        fontWeight: keyword === 'A股' ? 'bold' : 'normal'
+                    }}
+                >
+                    大盘纵览
+                </button>
+                {quickSectors.map((sector, sIdx) => (
+                    <button
+                        key={sIdx}
+                        onClick={() => handleChipClick(sector)}
+                        style={{
+                            padding: '6px 12px',
+                            borderRadius: '20px',
+                            border: '1px solid',
+                            borderColor: keyword === sector ? '#4f46e5' : '#334155',
+                            background: keyword === sector ? 'rgba(79, 70, 229, 0.2)' : '#1e293b',
+                            color: keyword === sector ? '#c7d2fe' : '#94a3b8',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            fontWeight: keyword === sector ? 'bold' : 'normal'
+                        }}
+                    >
+                        {sector}
+                    </button>
+                ))}
             </div>
 
             {error && (
