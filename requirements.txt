@@ -1,0 +1,7 @@
+akshare>=1.12.0
+pandas>=2.0.0
+beautifulsoup4
+html5lib
+lxml
+requests
+curl_cffi

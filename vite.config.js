@@ -98,6 +98,32 @@ export default defineConfig({
           next();
         }
       });
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url.startsWith('/api/news')) {
+          const urlObj = new URL(req.url, `http://${req.headers.host}`);
+          const keyword = urlObj.searchParams.get('keyword') || '';
+
+          console.log(`[Preview News Fetch] Keyword: ${keyword}`);
+          const scriptPath = path.resolve(__dirname, 'src/services/fetch_news.py');
+          const cmd = `python3 "${scriptPath}" "${keyword}"`;
+
+          exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            if (error) {
+              console.error("[Preview News Fetch] Error:", error);
+              res.statusCode = 500;
+              res.end(JSON.stringify({ success: false, error: error.message }));
+              return;
+            }
+            res.statusCode = 200;
+            res.end(stdout);
+          });
+        } else {
+          next();
+        }
+      });
     }
   },
 })
