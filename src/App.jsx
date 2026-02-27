@@ -113,9 +113,16 @@ function App() {
   };
 
   useEffect(() => {
-    if (funds.length === 0) return;
+    const activeGroup = groups.find(g => g.name === activeTab);
+
+    // 如果处于没有基金列表的 Tab（例如实时快讯），或者列表为空，则不建立轮询
+    if (!activeGroup || !activeGroup.codes || activeGroup.codes.length === 0) {
+      return;
+    }
+
     const fetchUpdates = async () => {
-      const codes = funds.map(f => f.code);
+      // 仅刷新当前页面展示的基金，而非所有全局缓存的基金，节约网络
+      const codes = activeGroup.codes;
       try {
         const updates = await fundApi.getRealTimeEstimates(codes);
         setFunds(currentFunds => {
@@ -128,9 +135,10 @@ function App() {
         console.error("Failed to fetch updates", error);
       }
     };
+
     const interval = setInterval(fetchUpdates, 10000);
     return () => clearInterval(interval);
-  }, [funds.length]);
+  }, [activeTab, groups]);
 
   const activeFundData = selectedFund ? funds.find(f => f.code === selectedFund.code) || selectedFund : null;
 
