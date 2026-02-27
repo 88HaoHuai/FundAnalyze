@@ -5,7 +5,7 @@ import requests
 import os
 
 API_KEY = "sk-deoeqqlzkxpwclsbcibwgaljzmfxhhsncaebnswqyytzbghj"
-MODEL = "Pro/moonshotai/Kimi-k2.5"
+MODEL = "Pro/moonshotai/Kimi-K2.5"
 
 def get_fund_names_str():
     try:
@@ -33,11 +33,17 @@ class handler(BaseHTTPRequestHandler):
             fund_sectors = get_fund_names_str()
             
             system_prompt = f"""你是一个顶级的金融量化分析师。请分析用户发给你的财经快讯，并提供以下四个维度的结构化提取。
-强制要求：严格只返回合法合规的 JSON 格式（不要包括 markdown 代码块如 ````json``），JSON 字段必须包含且仅包含如下：
-1. "sentiment": 枚举值（"利好", "利空", "中性"），只能选其一。
-2. "score": 整型数字 0 到 100（代表该情绪绝对热度/强度，0最弱，100最强。比如极大暴雷利空可给90，平淡中性可给10）。
-3. "summary": 字符串，将繁杂信息极简浓缩成一句话重点的核心摘要。
-4. "impact": 数组。必须从给定的[现有监控版块/基金池]里，挑出1-3个受此消息最直接影响的版块名称（如果没有相关度极高的，就返回空数组 `[]`）。不能胡编乱造版块名。
+强制要求：严格只返回合法合规的 JSON 格式（绝对不要包含 ```json 这样的 markdown 标记，也绝对不要包含任何 // 注释），结构严格如下：
+{{
+    "sentiment": "利好",
+    "score": 85,
+    "summary": "一句话摘要",
+    "impact": ["版块名1", "版块名2"]
+}}
+注意：
+1. sentiment 只能是 "利好", "利空", "中性" 之一。
+2. score 是 0-100 的整数，表示情绪烈度。
+3. 必须确保 "impact" 数组内的元素全部来自于[现有监控版块/基金池]，不能编造，若无影响返回 []。
 
 现有监控版块/基金池包括：[{fund_sectors}]
 """
@@ -59,7 +65,7 @@ class handler(BaseHTTPRequestHandler):
             }
 
             # fetch upstream
-            res = requests.post(url, json=payload, headers=headers, timeout=20)
+            res = requests.post(url, json=payload, headers=headers, timeout=60)
             res.raise_for_status()
             ai_resp_json = res.json()
             
@@ -68,6 +74,16 @@ class handler(BaseHTTPRequestHandler):
                 ai_msg = ai_msg.strip("`").replace("json\n", "", 1)
                 
             final_data = json.loads(ai_msg)
+            
+            # 手动对不规矩的大模型返回结果进行容错（尤其是中文标点）
+            valid_sentiments = ["利好", "利空", "中性"]
+            if final_data.get("sentiment") not in valid_sentiments:
+                if "利好" in ai_msg:
+                    final_data["sentiment"] = "利好"
+                elif "利空" in ai_msg:
+                    final_data["sentiment"] = "利空"
+                else:
+                    final_data["sentiment"] = "中性"
 
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
