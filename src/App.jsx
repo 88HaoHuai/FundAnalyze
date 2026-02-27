@@ -4,6 +4,7 @@ import { FundCard } from './components/FundCard';
 import { FundPerspective } from './components/FundPerspective';
 import { FundManager } from './components/FundManager';
 import { MarketCompass } from './components/MarketCompass';
+import { NewsBoard } from './components/NewsBoard';
 import { fundApi } from './services/fundApi';
 import initialFundGroups from './config/funds.json';
 
@@ -211,44 +212,58 @@ function App() {
                 {group.name}
               </button>
             ))}
+            <button
+              key="newsId"
+              onClick={() => setActiveTab('实时快讯')}
+              className={activeTab === '实时快讯' ? 'btn' : 'btn-secondary'}
+              style={{ whiteSpace: 'nowrap', border: '1px solid #4f46e5' }}
+            >
+              🔥 实时快讯
+            </button>
           </div>
 
-          <FundSearch onAddFund={handleAddFund} existingCodes={activeGroup?.codes || []} />
+          {activeTab === '实时快讯' ? (
+            <NewsBoard />
+          ) : (
+            <>
+              <FundSearch onAddFund={handleAddFund} existingCodes={activeGroup?.codes || []} />
 
-          {activeGroup?.isMarket && (
-            <MarketCompass funds={activeGroup.codes} shortNames={activeGroup.shortNames} />
-          )}
+              {activeGroup?.isMarket && (
+                <MarketCompass funds={activeGroup.codes} shortNames={activeGroup.shortNames} />
+              )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
-            {visibleFunds.length === 0 ? (
-              <div className="card">
-                <p className="text-secondary" style={{ textAlign: 'center' }}>
-                  No funds in this group. Add one to track.
-                </p>
-              </div>
-            ) : (
-              <>
-                {!activeGroup?.isMarket && (
-                  <div className="card flex-between" style={{ padding: 'var(--spacing-3)', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                    <span className="text-secondary">Group Count</span>
-                    <span style={{ fontWeight: 'bold' }}>{visibleFunds.length}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
+                {visibleFunds.length === 0 ? (
+                  <div className="card">
+                    <p className="text-secondary" style={{ textAlign: 'center' }}>
+                      No funds in this group. Add one to track.
+                    </p>
                   </div>
-                )}
+                ) : (
+                  <>
+                    {!activeGroup?.isMarket && (
+                      <div className="card flex-between" style={{ padding: 'var(--spacing-3)', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                        <span className="text-secondary">Group Count</span>
+                        <span style={{ fontWeight: 'bold' }}>{visibleFunds.length}</span>
+                      </div>
+                    )}
 
-                {visibleFunds.map(fund => (
-                  <FundCard
-                    key={fund.code}
-                    fund={fund}
-                    industryLabel={activeGroup?.shortNames?.[fund.code]}
-                    prevChange={prevChanges[fund.code]}
-                    analysis={analysisData[fund.code]}
-                    onRemove={() => handleRemove(fund.code)}
-                    onOpenPerspective={() => setSelectedFund(fund)}
-                  />
-                ))}
-              </>
-            )}
-          </div>
+                    {visibleFunds.map(fund => (
+                      <FundCard
+                        key={fund.code}
+                        fund={fund}
+                        industryLabel={activeGroup?.shortNames?.[fund.code]}
+                        prevChange={prevChanges[fund.code]}
+                        analysis={analysisData[fund.code]}
+                        onRemove={() => handleRemove(fund.code)}
+                        onOpenPerspective={() => setSelectedFund(fund)}
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
+            </>
+          )}
 
           <div style={{
             marginTop: '20px',

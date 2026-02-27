@@ -428,5 +428,20 @@ export const fundApi = {
             console.error('Failed to fetch stock quotes', e);
             return {};
         }
+    },
+
+    // Fetch realtime news from local Python bridge
+    fetchNews: async (keyword = '') => {
+        try {
+            const res = await fetch(`/api/news?keyword=${encodeURIComponent(keyword)}`);
+            const json = await res.json();
+            if (json.success && json.data) {
+                return json.data;
+            }
+            return [];
+        } catch (e) {
+            console.error('Failed to fetch news', e);
+            return [];
+        }
     }
 };

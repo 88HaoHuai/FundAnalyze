@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,6 +72,27 @@ export default defineConfig({
               res.statusCode = 500;
               res.end(JSON.stringify({ error: 'Failed to write file' }));
             }
+          });
+        } else if (req.url.startsWith('/api/news')) {
+          // Parse query string for keyword
+          const urlObj = new URL(req.url, `http://${req.headers.host}`);
+          const keyword = urlObj.searchParams.get('keyword') || '';
+
+          console.log(`[News Fetch] Keyword: ${keyword}`);
+          const scriptPath = path.resolve(__dirname, 'src/services/fetch_news.py');
+          const cmd = `python3 "${scriptPath}" "${keyword}"`;
+
+          exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            if (error) {
+              console.error("[News Fetch] Error:", error);
+              // Fallback to sending error logic
+              res.statusCode = 500;
+              res.end(JSON.stringify({ success: false, error: error.message }));
+              return;
+            }
+            res.statusCode = 200;
+            res.end(stdout);
           });
         } else {
           next();
