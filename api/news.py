@@ -3,6 +3,7 @@ import json
 import urllib.parse
 import requests
 import akshare as ak
+import traceback
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -43,10 +44,11 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
             
         except Exception as e:
+            err_trace = traceback.format_exc()
             self.send_response(500)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             
-            response = {'success': False, 'error': str(e)}
+            response = {'success': False, 'error': str(e), 'traceback': err_trace}
             self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
