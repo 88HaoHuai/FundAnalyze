@@ -10,7 +10,84 @@ const __dirname = path.dirname(__filename);
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'local-python-api-proxy',
+      configureServer(server) {
+        server.middlewares.use(async (req, res, next) => {
+          if (req.url.startsWith('/api/funds/save') && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => {
+              body += chunk.toString();
+            });
+            req.on('end', () => {
+              try {
+                const funds = JSON.parse(body);
+                const filePath = path.resolve(__dirname, 'src/config/funds.json');
+                console.log(`[Funds Save] Saving to ${filePath}`);
+                fs.writeFileSync(filePath, JSON.stringify(funds, null, 2));
+                console.log(`[Funds Save] Success!`);
+                res.statusCode = 200;
+                res.end(JSON.stringify({ success: true }));
+              } catch (e) {
+                console.error('Failed to write funds file', e);
+                res.statusCode = 500;
+                res.end(JSON.stringify({ error: 'Failed to write file' }));
+              }
+            });
+          } else if (req.url.startsWith('/api/news')) {
+            const urlObj = new URL(req.url, `http://${req.headers.host}`);
+            const keyword = urlObj.searchParams.get('keyword') || '';
+
+            console.log(`[News Fetch] Keyword: ${keyword}`);
+            const scriptPath = path.resolve(__dirname, 'src/services/fetch_news.py');
+            const cmd = `python3 "${scriptPath}" "${keyword}"`;
+
+            exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              if (error) {
+                console.error("[News Fetch] Error:", error);
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: error.message }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(stdout);
+            });
+          } else {
+            next();
+          }
+        });
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url.startsWith('/api/news')) {
+            const urlObj = new URL(req.url, `http://${req.headers.host}`);
+            const keyword = urlObj.searchParams.get('keyword') || '';
+
+            console.log(`[Preview News Fetch] Keyword: ${keyword}`);
+            const scriptPath = path.resolve(__dirname, 'src/services/fetch_news.py');
+            const cmd = `python3 "${scriptPath}" "${keyword}"`;
+
+            exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              if (error) {
+                console.error("[Preview News Fetch] Error:", error);
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: error.message }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(stdout);
+            });
+          } else {
+            next();
+          }
+        });
+      }
+    }
+  ],
   server: {
     proxy: {
       '/api/fund': {
@@ -50,80 +127,6 @@ export default defineConfig({
           'User-Agent': 'Mozilla/5.0'
         }
       },
-    },
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        if (req.url.startsWith('/api/funds/save') && req.method === 'POST') {
-          let body = '';
-          req.on('data', chunk => {
-            body += chunk.toString();
-          });
-          req.on('end', () => {
-            try {
-              const funds = JSON.parse(body);
-              const filePath = path.resolve(__dirname, 'src/config/funds.json');
-              console.log(`[Funds Save] Saving to ${filePath}`);
-              fs.writeFileSync(filePath, JSON.stringify(funds, null, 2));
-              console.log(`[Funds Save] Success!`);
-              res.statusCode = 200;
-              res.end(JSON.stringify({ success: true }));
-            } catch (e) {
-              console.error('Failed to write funds file', e);
-              res.statusCode = 500;
-              res.end(JSON.stringify({ error: 'Failed to write file' }));
-            }
-          });
-        } else if (req.url.startsWith('/api/news')) {
-          // Parse query string for keyword
-          const urlObj = new URL(req.url, `http://${req.headers.host}`);
-          const keyword = urlObj.searchParams.get('keyword') || '';
-
-          console.log(`[News Fetch] Keyword: ${keyword}`);
-          const scriptPath = path.resolve(__dirname, 'src/services/fetch_news.py');
-          const cmd = `python3 "${scriptPath}" "${keyword}"`;
-
-          exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            if (error) {
-              console.error("[News Fetch] Error:", error);
-              // Fallback to sending error logic
-              res.statusCode = 500;
-              res.end(JSON.stringify({ success: false, error: error.message }));
-              return;
-            }
-            res.statusCode = 200;
-            res.end(stdout);
-          });
-        } else {
-          next();
-        }
-      });
-    },
-    configurePreviewServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (req.url.startsWith('/api/news')) {
-          const urlObj = new URL(req.url, `http://${req.headers.host}`);
-          const keyword = urlObj.searchParams.get('keyword') || '';
-
-          console.log(`[Preview News Fetch] Keyword: ${keyword}`);
-          const scriptPath = path.resolve(__dirname, 'src/services/fetch_news.py');
-          const cmd = `python3 "${scriptPath}" "${keyword}"`;
-
-          exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            if (error) {
-              console.error("[Preview News Fetch] Error:", error);
-              res.statusCode = 500;
-              res.end(JSON.stringify({ success: false, error: error.message }));
-              return;
-            }
-            res.statusCode = 200;
-            res.end(stdout);
-          });
-        } else {
-          next();
-        }
-      });
     }
-  },
+  }
 })
