@@ -52,8 +52,8 @@ export default defineConfig({
       },
     },
     configureServer(server) {
-      server.middlewares.use('/api/funds/save', async (req, res, next) => {
-        if (req.method === 'POST') {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.url.startsWith('/api/funds/save') && req.method === 'POST') {
           let body = '';
           req.on('data', chunk => {
             body += chunk.toString();
