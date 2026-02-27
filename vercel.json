@@ -16,15 +16,5 @@
             "source": "/api/stock",
             "destination": "/api/stock-proxy"
         }
-    ],
-    "builds": [
-        {
-            "src": "api/**/*.py",
-            "use": "@vercel/python"
-        },
-        {
-            "src": "package.json",
-            "use": "@vercel/static-build"
-        }
     ]
 }
