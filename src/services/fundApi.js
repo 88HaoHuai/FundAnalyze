@@ -443,5 +443,26 @@ export const fundApi = {
             console.error('Failed to fetch news', e);
             return [];
         }
+    },
+
+    // Fetch AI Analysis from SiliconFlow bridge
+    fetchAI: async (title, content) => {
+        try {
+            const res = await fetch('/api/ai', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ title, content })
+            });
+            const json = await res.json();
+            if (json.success && json.data) {
+                return json.data;
+            }
+            return null;
+        } catch (e) {
+            console.error('Failed to analyze with AI', e);
+            return null;
+        }
     }
 };

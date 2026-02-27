@@ -55,6 +55,43 @@ export default defineConfig({
               res.statusCode = 200;
               res.end(stdout);
             });
+          } else if (req.url.startsWith('/api/ai') && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => {
+              body += chunk.toString();
+            });
+            req.on('end', () => {
+              try {
+                const payload = JSON.parse(body);
+                const title = payload.title || '';
+                const content = payload.content || '';
+
+                console.log(`[AI Analysis] Processing: ${title}`);
+                const scriptPath = path.resolve(__dirname, 'src/services/fetch_ai.py');
+
+                // 将 title 和 content 使用 Base64 或安全的引号包裹传给 Python
+                // 为简便此处的 exec 安全性，使用包裹双引号，并替换文内双引号
+                const safeTitle = title.replace(/"/g, '\\"').replace(/\n/g, ' ');
+                const safeContent = content.replace(/"/g, '\\"').replace(/\n/g, ' ');
+                const cmd = `python3 "${scriptPath}" "${safeTitle}" "${safeContent}"`;
+
+                exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  if (error) {
+                    console.error("[AI Analysis] Error:", error);
+                    console.error(stderr);
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, error: error.message }));
+                    return;
+                  }
+                  res.statusCode = 200;
+                  res.end(stdout);
+                });
+              } catch (e) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: 'Invalid Payload' }));
+              }
+            });
           } else {
             next();
           }
@@ -80,6 +117,38 @@ export default defineConfig({
               }
               res.statusCode = 200;
               res.end(stdout);
+            });
+          } else if (req.url.startsWith('/api/ai') && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => {
+              body += chunk.toString();
+            });
+            req.on('end', () => {
+              try {
+                const payload = JSON.parse(body);
+                const title = payload.title || '';
+                const content = payload.content || '';
+
+                console.log(`[Preview AI Analysis] Processing: ${title}`);
+                const scriptPath = path.resolve(__dirname, 'src/services/fetch_ai.py');
+                const safeTitle = title.replace(/"/g, '\\"').replace(/\n/g, ' ');
+                const safeContent = content.replace(/"/g, '\\"').replace(/\n/g, ' ');
+                const cmd = `python3 "${scriptPath}" "${safeTitle}" "${safeContent}"`;
+
+                exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  if (error) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, error: error.message }));
+                    return;
+                  }
+                  res.statusCode = 200;
+                  res.end(stdout);
+                });
+              } catch (e) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: 'Invalid Payload' }));
+              }
             });
           } else {
             next();

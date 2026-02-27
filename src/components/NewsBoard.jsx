@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fundApi } from '../services/fundApi';
-import { Loader, Search, RefreshCw, Clock, AlertCircle } from 'lucide-react';
+import { Loader, Search, RefreshCw, Clock, AlertCircle, Sparkles, TrendingUp, TrendingDown, Minus, Target } from 'lucide-react';
 
 export function NewsBoard() {
     const [news, setNews] = useState([]);
@@ -8,6 +8,7 @@ export function NewsBoard() {
     const [keyword, setKeyword] = useState('');
     const [searchInput, setSearchInput] = useState('');
     const [error, setError] = useState(null);
+    const [aiStatus, setAiStatus] = useState({}); // { [idx]: { loading: boolean, data: null | {sentiment, score, summary, impact} } }
 
     const loadNews = async (searchKw = '') => {
         setLoading(true);
@@ -15,6 +16,7 @@ export function NewsBoard() {
         try {
             const data = await fundApi.fetchNews(searchKw);
             setNews(data);
+            setAiStatus({}); // reset AI status on new fetch
         } catch (e) {
             setError('获取快讯失败，请检查 Python 及 AkShare 依赖是否安装正常。');
         } finally {
@@ -30,6 +32,28 @@ export function NewsBoard() {
         e.preventDefault();
         setKeyword(searchInput);
         loadNews(searchInput);
+    };
+
+    const handleAITrigger = async (idx, item) => {
+        // Init state for this idx
+        setAiStatus(prev => ({ ...prev, [idx]: { loading: true, data: null } }));
+
+        try {
+            const aiData = await fundApi.fetchAI(item.title, item.content);
+            if (aiData) {
+                setAiStatus(prev => ({ ...prev, [idx]: { loading: false, data: aiData } }));
+            } else {
+                setAiStatus(prev => ({ ...prev, [idx]: { loading: false, data: { error: '分析失败，模型无响应。' } } }));
+            }
+        } catch (e) {
+            setAiStatus(prev => ({ ...prev, [idx]: { loading: false, data: { error: '网络出错了，请稍后再试。' } } }));
+        }
+    };
+
+    const getSentimentColor = (sentiment) => {
+        if (sentiment === '利好') return { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', icon: <TrendingUp size={16} /> }; // Red for A-share positive
+        if (sentiment === '利空') return { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', icon: <TrendingDown size={16} /> }; // Green for A-share negative
+        return { bg: 'rgba(148, 163, 184, 0.1)', color: '#94a3b8', icon: <Minus size={16} /> }; // Gray neutral
     };
 
     return (
@@ -111,9 +135,96 @@ export function NewsBoard() {
                             <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#e2e8f0', marginBottom: '8px', lineHeight: '1.4' }}>
                                 {item.title || "无标题"}
                             </h3>
-                            <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                            <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: '1.6', whiteSpace: 'pre-wrap', marginBottom: '12px' }}>
                                 {item.content}
                             </p>
+
+                            {/* AI Trigger Container */}
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #334155', paddingTop: '12px', marginTop: '12px' }}>
+                                <button
+                                    className="btn btn-secondary"
+                                    style={{
+                                        borderRadius: '20px',
+                                        padding: '6px 16px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        fontSize: '13px',
+                                        borderColor: aiStatus[idx]?.data ? '#4f46e5' : '#334155',
+                                        color: aiStatus[idx]?.data ? '#818cf8' : '#e2e8f0',
+                                        background: aiStatus[idx]?.data ? 'rgba(79, 70, 229, 0.1)' : 'transparent'
+                                    }}
+                                    onClick={() => handleAITrigger(idx, item)}
+                                    disabled={aiStatus[idx]?.loading}
+                                >
+                                    {aiStatus[idx]?.loading ? (
+                                        <><Loader size={14} className="spin" /> 正在连线 Kimi 分析...</>
+                                    ) : (
+                                        <><Sparkles size={14} /> {aiStatus[idx]?.data ? '重新解读' : 'AI 深度解读'}</>
+                                    )}
+                                </button>
+                            </div>
+
+                            {/* AI Result Card */}
+                            {aiStatus[idx]?.data && !aiStatus[idx]?.data.error && (
+                                <div style={{
+                                    marginTop: '16px',
+                                    padding: '16px',
+                                    background: 'rgba(15, 23, 42, 0.5)',
+                                    borderRadius: '8px',
+                                    border: '1px solid #334155'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                        {/* Sentiment Badge */}
+                                        <div style={{
+                                            padding: '4px 10px',
+                                            borderRadius: '6px',
+                                            background: getSentimentColor(aiStatus[idx].data.sentiment).bg,
+                                            color: getSentimentColor(aiStatus[idx].data.sentiment).color,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontWeight: 'bold',
+                                            fontSize: '13px'
+                                        }}>
+                                            {getSentimentColor(aiStatus[idx].data.sentiment).icon}
+                                            {aiStatus[idx].data.sentiment} ({aiStatus[idx].data.score}分)
+                                        </div>
+                                    </div>
+
+                                    <div style={{ marginBottom: '12px' }}>
+                                        <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>⚡ 核心摘要</div>
+                                        <div style={{ color: '#e2e8f0', fontSize: '14px', lineHeight: '1.5' }}>{aiStatus[idx].data.summary}</div>
+                                    </div>
+
+                                    {aiStatus[idx].data.impact && aiStatus[idx].data.impact.length > 0 && (
+                                        <div>
+                                            <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                <Target size={12} /> 触及您的关注 / 持仓
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                                {aiStatus[idx].data.impact.map((sector, i) => (
+                                                    <span key={i} style={{
+                                                        background: '#1e293b',
+                                                        border: '1px solid #475569',
+                                                        color: '#cbd5e1',
+                                                        fontSize: '12px',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '4px'
+                                                    }}>{sector}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* AI Error Fallback */}
+                            {aiStatus[idx]?.data?.error && (
+                                <div style={{ marginTop: '12px', color: '#ef4444', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <AlertCircle size={14} /> {aiStatus[idx].data.error}
+                                </div>
+                            )}
                         </div>
                     ))
                 )}
