@@ -49,11 +49,13 @@ class handler(BaseHTTPRequestHandler):
                         continue
                 
                 show_time = time.strftime('%Y-%m-%d %H:%M', time.localtime(item.get("ctime", time.time())))
+                url = item.get("shareurl", "")
                 
                 result.append({
                     'time': show_time,
                     'title': title if title else "【财联社电报】",
-                    'content': content
+                    'content': content,
+                    'url': url
                 })
 
             self.send_response(200)

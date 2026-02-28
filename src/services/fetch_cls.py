@@ -40,11 +40,13 @@ def fetch_and_filter_cls_news(keyword):
                     continue
             
             show_time = time.strftime('%Y-%m-%d %H:%M', time.localtime(item.get("ctime", time.time())))
+            url = item.get("shareurl", "")
             
             result.append({
                 'time': show_time,
                 'title': title if title else "【财联社电报】",
-                'content': content
+                'content': content,
+                'url': url
             })
             
         return json.dumps({'success': True, 'data': result[:30]}, ensure_ascii=False)

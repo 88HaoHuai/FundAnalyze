@@ -197,7 +197,26 @@ export function NewsBoard({ source = 'em' }) {
                             </p>
 
                             {/* AI Trigger Container */}
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #334155', paddingTop: '12px', marginTop: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #334155', paddingTop: '12px', marginTop: '12px' }}>
+                                {item.url ? (
+                                    <a
+                                        href={item.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{
+                                            color: '#60a5fa',
+                                            fontSize: '13px',
+                                            textDecoration: 'none',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                                        onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                                    >
+                                        🔗 查看原文
+                                    </a>
+                                ) : <div />}
                                 <button
                                     className="btn btn-secondary"
                                     style={{

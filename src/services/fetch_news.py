@@ -52,11 +52,13 @@ def fetch_and_filter_news(keyword):
                     title = item.get("title", "").replace("<em>", "").replace("</em>", "")
                     content = item.get("content", "").replace("<em>", "").replace("</em>", "").replace("　", "").replace("\r\n", " ")
                     show_time = item.get("date", "")[:16]
+                    url = item.get("url", item.get("artUrl", ""))
                     
                     result.append({
                         'time': show_time,
                         'title': title,
-                        'content': content
+                        'content': content,
+                        'url': url
                     })
                 except Exception as loop_e:
                     continue

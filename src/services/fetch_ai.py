@@ -4,8 +4,7 @@ import requests
 import os
 
 API_KEY = "sk-deoeqqlzkxpwclsbcibwgaljzmfxhhsncaebnswqyytzbghj"
-MODEL = "Pro/moonshotai/moonshot-v1-8k" # just in case Kimi-k2.5 is not the exact tag name, but user asked for "Pro/moonshotai/Kimi-K2.5" ... wait, let's keep it as user requested but with correct capitalization
-MODEL = "Pro/moonshotai/Kimi-K2.5"
+MODEL = "Qwen/Qwen2.5-72B-Instruct"
 
 def get_fund_names_str():
     # 尝试读取本地的 funds.json 获取版块列表提供给大模型
