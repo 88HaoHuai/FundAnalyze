@@ -3,7 +3,7 @@ import { fundApi } from '../services/fundApi';
 import { Loader, Search, RefreshCw, Clock, AlertCircle, Sparkles, TrendingUp, TrendingDown, Minus, Target } from 'lucide-react';
 import fundsConfig from '../config/funds.json';
 
-export function NewsBoard() {
+export function NewsBoard({ source = 'em' }) {
     const [news, setNews] = useState([]);
     const [loading, setLoading] = useState(false);
     const [keyword, setKeyword] = useState('A股');
@@ -19,11 +19,13 @@ export function NewsBoard() {
         setLoading(true);
         setError(null);
         try {
-            const data = await fundApi.fetchNews(searchKw);
+            const data = source === 'cls'
+                ? await fundApi.getClsNews(searchKw)
+                : await fundApi.getNews(searchKw);
             setNews(data);
             setAiStatus({}); // reset AI status on new fetch
         } catch (e) {
-            setError('获取快讯失败，请检查 Python 及 AkShare 依赖是否安装正常。');
+            setError(source === 'cls' ? '获取财联社电报失败，请检查网络。' : '获取东方财富快讯失败，请检查网络。');
         } finally {
             setLoading(false);
         }
@@ -72,7 +74,7 @@ export function NewsBoard() {
         <div className="card" style={{ padding: '24px', minHeight: '600px' }}>
             <div className="flex-between" style={{ marginBottom: '24px' }}>
                 <h2 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    📰 实时快讯 (全球视角)
+                    {source === 'cls' ? '🗞️ 财联社电报 (滚动直播)' : '📰 实时快讯 (全球视角)'}
                 </h2>
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px' }}>
@@ -162,7 +164,9 @@ export function NewsBoard() {
                 {loading && news.length === 0 ? (
                     <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
                         <Loader className="spin" size={32} />
-                        <span style={{ marginLeft: '10px' }}>正在从东方财富获取最新快讯...</span>
+                        <span style={{ marginLeft: '10px' }}>
+                            {source === 'cls' ? '正在截获财联社最新电报...' : '正在从东方财富获取最新快讯...'}
+                        </span>
                     </div>
                 ) : news.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>

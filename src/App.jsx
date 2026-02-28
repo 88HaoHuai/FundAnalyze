@@ -225,10 +225,20 @@ function App() {
             >
               🔥 实时快讯
             </button>
+            <button
+              key="clsId"
+              onClick={() => setActiveTab('财联社电报')}
+              className={activeTab === '财联社电报' ? 'btn' : 'btn-secondary'}
+              style={{ whiteSpace: 'nowrap', border: '1px solid #ef4444' }}
+            >
+              🗞️ 财联社电报
+            </button>
           </div>
 
           {activeTab === '实时快讯' ? (
-            <NewsBoard />
+            <NewsBoard source="em" />
+          ) : activeTab === '财联社电报' ? (
+            <NewsBoard source="cls" />
           ) : (
             <>
               <FundSearch onAddFund={handleAddFund} existingCodes={activeGroup?.codes || []} />

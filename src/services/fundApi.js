@@ -431,16 +431,50 @@ export const fundApi = {
     },
 
     // Fetch realtime news from local Python bridge
-    fetchNews: async (keyword = '') => {
+    getNews: async (keyword = 'A股') => {
         try {
-            const res = await fetch(`/api/news?keyword=${encodeURIComponent(keyword)}`);
-            const json = await res.json();
-            if (json.success && json.data) {
-                return json.data;
+            const encodeKeyword = encodeURIComponent(keyword);
+            const res = await fetch(`/api/news?keyword=${encodeKeyword}`);
+            const text = await res.text();
+
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("Not a valid json:", text.substring(0, 100));
+                return [];
+            }
+
+            if (data.success && data.data) {
+                return data.data;
             }
             return [];
-        } catch (e) {
-            console.error('Failed to fetch news', e);
+        } catch (error) {
+            console.error("Failed to fetch news:", error);
+            return [];
+        }
+    },
+
+    getClsNews: async (keyword = 'A股') => {
+        try {
+            const encodeKeyword = encodeURIComponent(keyword);
+            const res = await fetch(`/api/news_cls?keyword=${encodeKeyword}`);
+            const text = await res.text();
+
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("Not a valid json:", text.substring(0, 100));
+                return [];
+            }
+
+            if (data.success && data.data) {
+                return data.data;
+            }
+            return [];
+        } catch (error) {
+            console.error("Failed to fetch cls news:", error);
             return [];
         }
     },
