@@ -33,11 +33,18 @@ def fetch_and_filter_news(keyword):
         
         res = requests.get(url, params=params, timeout=8)
         text = res.text
-        match = re.search(r'^cb\((.*)\)$', text.strip())
+        
+        # JSONP extract, fallback to string split
+        start_idx = text.find('(')
+        end_idx = text.rfind(')')
         
         result = []
-        if match:
-            data_json = json.loads(match.group(1))
+        if start_idx != -1 and end_idx != -1:
+            json_str = text[start_idx+1:end_idx]
+            try:
+                data_json = json.loads(json_str)
+            except:
+                data_json = {}
             articles = data_json.get("result", {}).get("cmsArticleWebOld", [])
             
             for item in articles:
