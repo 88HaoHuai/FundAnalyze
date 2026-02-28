@@ -5,7 +5,7 @@ import requests
 import os
 
 API_KEY = "sk-deoeqqlzkxpwclsbcibwgaljzmfxhhsncaebnswqyytzbghj"
-MODEL = "Qwen/Qwen2.5-72B-Instruct"
+MODEL = "Pro/Qwen/Qwen2.5-7B-Instruct"
 
 def get_fund_names_str():
     try:
