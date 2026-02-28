@@ -28,7 +28,7 @@ def fetch_and_filter_news(keyword):
         }
         params = {
             "cb": "cb",
-            "param": json.dumps(inner_param, ensure_ascii=False)
+            "param": json.dumps(inner_param, ensure_ascii=False, separators=(',', ':'))
         }
         
         res = requests.get(url, params=params, timeout=8)

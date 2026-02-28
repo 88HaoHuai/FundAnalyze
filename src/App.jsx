@@ -26,10 +26,7 @@ function App() {
 
   const [funds, setFunds] = useState([]);
   const [groups, setGroups] = useState(getInitialGroups);
-  const [activeTab, setActiveTab] = useState(() => {
-    const initial = getInitialGroups();
-    return initial[0]?.name || '默认';
-  });
+  const [activeTab, setActiveTab] = useState('实时快讯');
 
   const [selectedFund, setSelectedFund] = useState(null);
   const [showManager, setShowManager] = useState(false);

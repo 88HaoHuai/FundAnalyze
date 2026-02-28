@@ -34,10 +34,17 @@ class handler(BaseHTTPRequestHandler):
             }
             params = {
                 "cb": "cb",
-                "param": json.dumps(inner_param, ensure_ascii=False)
+                "param": json.dumps(inner_param, ensure_ascii=False, separators=(',', ':'))
             }
             
-            res = requests.get(url, params=params, timeout=8)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                "Referer": "https://so.eastmoney.com/",
+                "Accept": "*/*",
+                "Host": "search-api-web.eastmoney.com"
+            }
+            
+            res = requests.get(url, params=params, headers=headers, timeout=8)
             text = res.text
             
             start_idx = text.find('(')
