@@ -79,6 +79,9 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             
             response = {'success': True, 'data': result}
+            if not result:
+                response['debug_text'] = text[:1000]
+                
             self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
             
         except Exception as e:
