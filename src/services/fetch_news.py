@@ -1,28 +1,50 @@
 import sys
 import json
 import requests
-
-import akshare as ak
+import re
 
 def fetch_and_filter_news(keyword):
     try:
-        # Default fallback keyword if nothing provided
         search_kw = keyword if keyword else "A股"
         
-        # Use akshare's real financial news API
-        df = ak.stock_news_em(symbol=search_kw)
+        url = "https://search-api-web.eastmoney.com/search/jsonp"
+        inner_param = {
+            "uid": "",
+            "keyword": search_kw,
+            "type": ["cmsArticleWebOld"],
+            "client": "web",
+            "clientType": "web",
+            "clientVersion": "curr",
+            "param": {
+                "cmsArticleWebOld": {
+                    "searchScope": "default",
+                    "sort": "default",
+                    "pageIndex": 1,
+                    "pageSize": 30,
+                    "preTag": "",
+                    "postTag": "",
+                }
+            },
+        }
+        params = {
+            "cb": "cb",
+            "param": json.dumps(inner_param, ensure_ascii=False)
+        }
+        
+        res = requests.get(url, params=params, timeout=8)
+        text = res.text
+        match = re.search(r'^cb\((.*)\)$', text.strip())
         
         result = []
-        if not df.empty:
-            # Sort by time just in case, though it usually comes sorted
-            df = df.sort_values(by='发布时间', ascending=False)
+        if match:
+            data_json = json.loads(match.group(1))
+            articles = data_json.get("result", {}).get("cmsArticleWebOld", [])
             
-            # Take top 30 news
-            for _, row in df.head(30).iterrows():
+            for item in articles:
                 try:
-                    title = str(row['新闻标题'])
-                    content = str(row['新闻内容'])
-                    show_time = str(row['发布时间'])[:16] # "2026-02-27 13:14"
+                    title = item.get("title", "").replace("<em>", "").replace("</em>", "")
+                    content = item.get("content", "").replace("<em>", "").replace("</em>", "").replace("　", "").replace("\r\n", " ")
+                    show_time = item.get("date", "")[:16]
                     
                     result.append({
                         'time': show_time,
