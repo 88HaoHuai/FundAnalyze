@@ -1,65 +1,413 @@
-import { useState, useEffect } from 'react';
-import { X, Save, Edit2 } from 'lucide-react';
+import { useState } from 'react';
+import { X, Plus, Trash2, Edit2, Check, ChevronRight, Database, Layers, BarChart2 } from 'lucide-react';
+import {
+  createGroup, deleteGroup, renameGroup,
+  addMarketFund, removeMarketFund, renameMarketFund,
+} from '../services/supabaseHelpers';
 
-export function FundManager({ groups, onUpdate, onClose }) {
-    // We'll just edit the JSON directly for groups, as it's the most flexible way for now
-    // to add/remove groups or move funds.
-    const [jsonContent, setJsonContent] = useState(JSON.stringify(groups, null, 2));
-    const [error, setError] = useState(null);
+// 通用小标签
+function Badge({ children, color = '#4f46e5' }) {
+  return (
+    <span style={{
+      padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600',
+      background: `${color}22`, color: color, border: `1px solid ${color}44`,
+    }}>
+      {children}
+    </span>
+  );
+}
 
-    const handleSave = () => {
-        try {
-            const parsed = JSON.parse(jsonContent);
-            if (!Array.isArray(parsed)) throw new Error("Root must be an array of groups");
-            onUpdate(parsed);
-            onClose(); // Auto close on save for this mode
-        } catch (e) {
-            setError("Invalid JSON format: " + e.message);
-        }
-    };
+// 单行可编辑 + 删除
+function EditableRow({ label, onDelete, onRename }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(label);
 
-    return (
+  const commitRename = async () => {
+    if (val.trim() && val !== label) {
+      await onRename(val.trim());
+    }
+    setEditing(false);
+  };
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '8px',
+      padding: '8px 12px', borderRadius: '8px',
+      background: '#0f172a', border: '1px solid #334155',
+      transition: 'border-color 0.2s',
+    }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = '#4f46e5'}
+      onMouseLeave={e => e.currentTarget.style.borderColor = '#334155'}
+    >
+      {editing ? (
+        <input
+          autoFocus
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && commitRename()}
+          style={{
+            flex: 1, background: 'transparent', border: 'none',
+            color: '#f8fafc', fontSize: '14px', outline: 'none',
+          }}
+        />
+      ) : (
+        <span style={{ flex: 1, fontSize: '14px', color: '#e2e8f0' }}>{label}</span>
+      )}
+
+      {onRename && (
+        <button
+          onClick={() => editing ? commitRename() : setEditing(true)}
+          style={{ color: editing ? '#10b981' : '#475569', background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
+        >
+          {editing ? <Check size={14} /> : <Edit2 size={14} />}
+        </button>
+      )}
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
+  const [activeSection, setActiveSection] = useState('groups'); // 'groups' | 'market'
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newMarketCode, setNewMarketCode] = useState('');
+  const [newMarketName, setNewMarketName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  // 找到选中的分组对象
+  const selectedGroup = groups.find(g => g.id === selectedGroupId);
+
+  // 普通分组（非市场风向标）
+  const normalGroups = groups.filter(g => !g.isMarket);
+  // 市场风向标分组（只有一个）
+  const marketGroup = groups.find(g => g.isMarket);
+
+  const { codes: marketCodes = [], shortNames: marketShortNames = {} } = marketFundsData || {};
+
+  // 新增分组
+  const handleAddGroup = async () => {
+    const name = newGroupName.trim();
+    if (!name) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await createGroup(name, false, normalGroups.length);
+      setNewGroupName('');
+      await onUpdate();
+    } catch (e) {
+      setError(e.message || '创建分组失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 删除分组
+  const handleDeleteGroup = async (groupId) => {
+    if (!window.confirm('确认删除此分组？分组内的基金关联也将一并删除。')) return;
+    setSaving(true);
+    try {
+      await deleteGroup(groupId);
+      if (selectedGroupId === groupId) setSelectedGroupId(null);
+      await onUpdate();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 重命名分组
+  const handleRenameGroup = async (groupId, newName) => {
+    try {
+      await renameGroup(groupId, newName);
+      await onUpdate();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  // 新增市场风向标板块
+  const handleAddMarket = async () => {
+    const code = newMarketCode.trim();
+    const name = newMarketName.trim();
+    if (!code || !name) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await addMarketFund(code, name, marketCodes.length);
+      setNewMarketCode('');
+      setNewMarketName('');
+      await onUpdate();
+    } catch (e) {
+      setError(e.message || '添加板块失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 删除市场板块
+  const handleDeleteMarket = async (fundCode) => {
+    setSaving(true);
+    try {
+      await removeMarketFund(fundCode);
+      await onUpdate();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 重命名市场板块
+  const handleRenameMarket = async (fundCode, newName) => {
+    try {
+      await renameMarketFund(fundCode, newName);
+      await onUpdate();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const sectionBtns = [
+    { key: 'groups', label: '基金分组', icon: <Layers size={15} /> },
+    { key: 'market', label: '市场风向标', icon: <BarChart2 size={15} /> },
+  ];
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: '1rem',
+    }} onClick={onClose}>
+      <div
+        style={{
+          width: '100%', maxWidth: '680px', maxHeight: '85vh',
+          background: '#1e293b', borderRadius: '16px',
+          border: '1px solid #334155',
+          boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
+          display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* 顶栏 */}
         <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: 'var(--spacing-4)'
-        }} onClick={onClose}>
-            <div
-                className="card"
-                style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="flex-between" style={{ marginBottom: 'var(--spacing-4)' }}>
-                    <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 'bold' }}>Fund Group Manager</h2>
-                    <button onClick={onClose} className="btn-secondary" style={{ padding: 'var(--spacing-2)' }}>
-                        <X size={20} />
-                    </button>
-                </div>
-
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--spacing-2)' }}>
-                    <p className="text-secondary" style={{ fontSize: 'var(--font-size-sm)' }}>
-                        Edit the configuration JSON directly. You can create new groups by adding objects like <code>{`{ "name": "New Group", "codes": [] }`}</code>.
-                    </p>
-                    <textarea
-                        className="input"
-                        style={{ flex: 1, minHeight: '300px', fontFamily: 'monospace', fontSize: 'var(--font-size-sm)', whiteSpace: 'pre' }}
-                        value={jsonContent}
-                        onChange={e => {
-                            setJsonContent(e.target.value);
-                            setError(null);
-                        }}
-                    />
-                    {error && <p className="text-danger">{error}</p>}
-                </div>
-
-                <div className="flex-between" style={{ marginTop: 'var(--spacing-6)' }}>
-                    <button className="btn-secondary" onClick={onClose}>Cancel</button>
-                    <button className="btn" onClick={handleSave}>
-                        <Save size={18} style={{ marginRight: '4px' }} /> Save Changes
-                    </button>
-                </div>
-            </div>
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '20px 24px', borderBottom: '1px solid #334155',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Database size={20} color="#818cf8" />
+            <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#f8fafc' }}>配置管理</h2>
+          </div>
+          <button onClick={onClose} style={{
+            color: '#475569', background: 'none', border: 'none', cursor: 'pointer',
+            padding: '4px', borderRadius: '6px',
+          }}>
+            <X size={20} />
+          </button>
         </div>
-    );
+
+        {/* Section 切换 */}
+        <div style={{ display: 'flex', gap: '4px', padding: '12px 24px', borderBottom: '1px solid #334155' }}>
+          {sectionBtns.map(s => (
+            <button key={s.key} onClick={() => setActiveSection(s.key)} style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '500',
+              border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+              background: activeSection === s.key ? 'rgba(79,70,229,0.2)' : 'transparent',
+              color: activeSection === s.key ? '#a5b4fc' : '#64748b',
+            }}>
+              {s.icon} {s.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 主体内容 */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+          {error && (
+            <div style={{
+              padding: '10px 14px', borderRadius: '8px', marginBottom: '16px',
+              background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+              color: '#f87171', fontSize: '13px',
+            }}>
+              {error}
+            </div>
+          )}
+
+          {/* ========== 基金分组区 ========== */}
+          {activeSection === 'groups' && (
+            <div style={{ display: 'flex', gap: '16px', height: '100%' }}>
+              {/* 左侧：分组列表 */}
+              <div style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', fontWeight: '600', letterSpacing: '0.05em' }}>
+                  我的分组
+                </div>
+                {normalGroups.map(g => (
+                  <div key={g.id}
+                    onClick={() => setSelectedGroupId(g.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
+                      border: '1px solid',
+                      borderColor: selectedGroupId === g.id ? '#4f46e5' : '#334155',
+                      background: selectedGroupId === g.id ? 'rgba(79,70,229,0.15)' : '#0f172a',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '14px', color: '#e2e8f0' }}>{g.name}</span>
+                      <Badge>{g.codes.length}</Badge>
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g.id); }}
+                        style={{ color: '#475569', background: 'none', border: 'none', cursor: 'pointer' }}>
+                        <Trash2 size={13} />
+                      </button>
+                      <ChevronRight size={14} color={selectedGroupId === g.id ? '#818cf8' : '#475569'} />
+                    </div>
+                  </div>
+                ))}
+
+                {/* 新增分组 */}
+                <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
+                  <input
+                    value={newGroupName}
+                    onChange={e => setNewGroupName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddGroup()}
+                    placeholder="新分组名称..."
+                    style={{
+                      flex: 1, padding: '7px 10px',
+                      background: '#0f172a', border: '1px solid #334155',
+                      borderRadius: '7px', color: '#f8fafc', fontSize: '13px', outline: 'none',
+                    }}
+                  />
+                  <button onClick={handleAddGroup} disabled={saving || !newGroupName.trim()} style={{
+                    padding: '7px 10px',
+                    background: 'rgba(79,70,229,0.2)', border: '1px solid #4f46e5',
+                    borderRadius: '7px', color: '#a5b4fc', cursor: 'pointer',
+                  }}>
+                    <Plus size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 右侧：选中分组的基金列表 */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {selectedGroup ? (
+                  <>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', fontWeight: '600', letterSpacing: '0.05em' }}>
+                      「{selectedGroup.name}」的基金列表（{selectedGroup.codes.length} 支）
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '340px' }}>
+                      {selectedGroup.codes.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: '#475569', padding: '40px 0', fontSize: '13px' }}>
+                          该分组暂无基金，可在主页搜索添加
+                        </div>
+                      ) : (
+                        selectedGroup.codes.map(code => (
+                          <EditableRow
+                            key={code}
+                            label={code}
+                            onDelete={() => {}}
+                            onRename={null}
+                          />
+                        ))
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#475569', fontSize: '13px', flexDirection: 'column', gap: '8px',
+                  }}>
+                    <Layers size={28} color="#334155" />
+                    <span>← 点击左侧分组查看基金列表</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ========== 市场风向标区 ========== */}
+          {activeSection === 'market' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', letterSpacing: '0.05em' }}>
+                市场风向标板块（{marketCodes.length} 个）
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '320px', overflowY: 'auto' }}>
+                {marketCodes.map((code, idx) => (
+                  <div key={code} style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '8px 12px', borderRadius: '8px',
+                    background: '#0f172a', border: '1px solid #334155',
+                  }}>
+                    <span style={{ fontSize: '11px', color: '#475569', width: '24px', textAlign: 'center' }}>{idx + 1}</span>
+                    <span style={{ fontSize: '12px', color: '#64748b', width: '70px', fontFamily: 'monospace' }}>{code}</span>
+                    <EditableRow
+                      label={marketShortNames[code] || code}
+                      onRename={(newName) => handleRenameMarket(code, newName)}
+                      onDelete={() => handleDeleteMarket(code)}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* 新增板块 */}
+              <div style={{
+                display: 'flex', gap: '8px', alignItems: 'center',
+                padding: '12px', background: '#0f172a',
+                borderRadius: '10px', border: '1px dashed #334155',
+              }}>
+                <input
+                  value={newMarketCode}
+                  onChange={e => setNewMarketCode(e.target.value)}
+                  placeholder="基金代码（6位）"
+                  style={{
+                    width: '110px', padding: '8px 10px',
+                    background: '#1e293b', border: '1px solid #334155',
+                    borderRadius: '7px', color: '#f8fafc', fontSize: '13px', outline: 'none',
+                    fontFamily: 'monospace',
+                  }}
+                />
+                <input
+                  value={newMarketName}
+                  onChange={e => setNewMarketName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAddMarket()}
+                  placeholder="板块短名（如：半导体）"
+                  style={{
+                    flex: 1, padding: '8px 10px',
+                    background: '#1e293b', border: '1px solid #334155',
+                    borderRadius: '7px', color: '#f8fafc', fontSize: '13px', outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={handleAddMarket}
+                  disabled={saving || !newMarketCode.trim() || !newMarketName.trim()}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '8px 14px',
+                    background: 'linear-gradient(135deg, #4f46e5, #3b82f6)',
+                    border: 'none', borderRadius: '7px',
+                    color: 'white', fontSize: '13px', cursor: 'pointer', fontWeight: '500',
+                  }}
+                >
+                  <Plus size={14} /> 添加
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

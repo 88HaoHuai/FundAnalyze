@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { fundApi } from '../services/fundApi';
 import { Loader, Search, RefreshCw, Clock, AlertCircle, Sparkles, TrendingUp, TrendingDown, Minus, Target } from 'lucide-react';
-import fundsConfig from '../config/funds.json';
 
-export function NewsBoard({ source = 'em' }) {
+
+export function NewsBoard({ source = 'em', groups = [] }) {
     const [news, setNews] = useState([]);
     const [loading, setLoading] = useState(false);
     const [keyword, setKeyword] = useState('A股');
@@ -12,7 +12,7 @@ export function NewsBoard({ source = 'em' }) {
     const [aiStatus, setAiStatus] = useState({}); // { [idx]: { loading: boolean, data: null | {sentiment, score, summary, impact} } }
 
     // Parse market fund names for quick chips
-    const marketFunds = fundsConfig.find(item => item.isMarket === true);
+    const marketFunds = groups.find(item => item.isMarket === true);
     const quickSectors = marketFunds && marketFunds.shortNames ? Object.values(marketFunds.shortNames).filter(n => n !== '沪深300' && n !== '上证50' && n !== '恒生指数' && n !== '红利低波') : [];
 
     const loadNews = async (searchKw = 'A股') => {
@@ -53,7 +53,7 @@ export function NewsBoard({ source = 'em' }) {
         setAiStatus(prev => ({ ...prev, [idx]: { loading: true, data: null } }));
 
         try {
-            const aiData = await fundApi.fetchAI(item.title, item.content);
+            const aiData = await fundApi.fetchAI(item.title, item.content, quickSectors.join(', '));
             if (aiData) {
                 setAiStatus(prev => ({ ...prev, [idx]: { loading: false, data: aiData } }));
             } else {

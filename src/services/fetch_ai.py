@@ -6,24 +6,11 @@ import os
 API_KEY = "sk-deoeqqlzkxpwclsbcibwgaljzmfxhhsncaebnswqyytzbghj"
 MODEL = "Pro/Qwen/Qwen2.5-7B-Instruct"
 
-def get_fund_names_str():
-    # 尝试读取本地的 funds.json 获取版块列表提供给大模型
-    try:
-        config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'funds.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            market_funds = [x for x in data if x.get("name") == "市场风向标"]
-            if market_funds and "shortNames" in market_funds[0]:
-                return ", ".join(market_funds[0]["shortNames"].values())
-    except:
-        pass
-    # 跌落保底短名
-    return "沪深300, 恒生指数, 中概互联, 半导体, 电子, 消费电子, 通信设备, 人工智能, 游戏, 传媒, 计算机, 软件服务, 创新药, 医疗医药, 新能源汽车, 光伏产业, 白酒板块"
-
-def analyze_news(title, content):
+def analyze_news(title, content, fund_sectors):
     try:
         url = "https://api.siliconflow.cn/v1/chat/completions"
-        fund_sectors = get_fund_names_str()
+        if not fund_sectors or len(fund_sectors.strip()) == 0:
+             fund_sectors = "沪深300, 恒生指数, 中概互联, 半导体, 电子, 消费电子, 通信设备, 人工智能, 游戏, 传媒, 计算机, 软件服务, 创新药, 医疗医药, 新能源汽车, 光伏产业, 白酒板块"
         
         system_prompt = f"""你是一个顶级的金融量化分析师。请分析用户发给你的财经快讯，并提供以下四个维度的结构化提取。
 强制要求：严格只返回合法合规的 JSON 格式（绝对不要包含 ```json 这样的 markdown 标记，也绝对不要包含任何 // 注释），结构严格如下：
@@ -87,7 +74,8 @@ def analyze_news(title, content):
         print(json.dumps({'success': False, 'error': str(e)}, ensure_ascii=False))
 
 if __name__ == '__main__':
-    # 传参逻辑：python fetch_ai.py "title" "content"
+    # 传参逻辑：python fetch_ai.py "title" "content" "fund_sectors"
     t = sys.argv[1] if len(sys.argv) > 1 else ""
     c = sys.argv[2] if len(sys.argv) > 2 else ""
-    analyze_news(t, c)
+    sectors = sys.argv[3] if len(sys.argv) > 3 else ""
+    analyze_news(t, c, sectors)

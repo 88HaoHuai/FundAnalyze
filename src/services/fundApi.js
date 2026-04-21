@@ -22,16 +22,60 @@ export const fundApi = {
             if (!response.ok) throw new Error('Network response was not ok');
             const text = await response.text();
             const data = fundApi.parseJsonp(text);
-            if (!data) throw new Error('Invalid data format');
+
+            // QDII 等品种不支持盘中实时估值，接口返回空 jsonpgz()
+            if (!data || !data.fundcode) {
+                // 并发拉取：pingzhong 接口获取基金名，lsjz 接口获取昨日净值
+                let fundName = code;
+                let nav = null, navDate = null, prevDayChange = null;
+
+                try {
+                    const [pingRes, lsjzRes] = await Promise.all([
+                        fetch(`/api/pingzhong/${code}.js?rt=${Date.now()}`),
+                        fetch(`/api/f10/lsjz?fundCode=${code}&pageIndex=1&pageSize=1`),
+                    ]);
+
+                    // 从 pingzhong 解析基金名
+                    if (pingRes.ok) {
+                        const pingText = await pingRes.text();
+                        const nameMatch = pingText.match(/var fS_name\s*=\s*"([^"]+)"/);
+                        if (nameMatch) fundName = nameMatch[1];
+                    }
+
+                    // 从 lsjz 解析昨日净值与涨幅
+                    if (lsjzRes.ok) {
+                        const lsjzJson = await lsjzRes.json();
+                        const list = lsjzJson?.Data?.LSJZList;
+                        if (list && list.length > 0) {
+                            nav = list[0].DWJZ;
+                            navDate = list[0].FSRQ;
+                            prevDayChange = list[0].JZZZL;
+                        }
+                    }
+                } catch (_) { /* 备用接口异常时跳过 */ }
+
+                return {
+                    code,
+                    name: fundName,
+                    nav,
+                    navDate,
+                    estChange: null,   // 无实时估算
+                    estTime: null,
+                    valuation: null,
+                    holdings: [],
+                    noData: true,
+                    prevDayChange,     // 直接内嵌昨日涨幅，供 FundCard 展示
+                };
+            }
 
             return {
                 code: data.fundcode,
                 name: data.name,
-                nav: data.dwjz, // Unit Net Value (Yesterday's close)
-                navDate: data.jzrq, // NAV Date
-                estChange: data.gszzl, // Estimated Growth Rate (Today)
-                estTime: data.gztime, // Estimation Time
-                valuation: data.gsz, // Estimated Value
+                nav: data.dwjz,
+                navDate: data.jzrq,
+                estChange: data.gszzl,
+                estTime: data.gztime,
+                valuation: data.gsz,
                 holdings: []
             };
         } catch (error) {
@@ -480,14 +524,14 @@ export const fundApi = {
     },
 
     // Fetch AI Analysis from SiliconFlow bridge
-    fetchAI: async (title, content) => {
+    fetchAI: async (title, content, fundSectors = "") => {
         try {
             const res = await fetch('/api/ai', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ title, content })
+                body: JSON.stringify({ title, content, fundSectors })
             });
             const json = await res.json();
             if (json.success && json.data) {
