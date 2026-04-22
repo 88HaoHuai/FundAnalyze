@@ -7,6 +7,7 @@ from email.mime.text import MIMEText
 from email.header import Header
 from datetime import date
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ============================================================
 # 环境变量配置
@@ -167,16 +168,23 @@ class handler(BaseHTTPRequestHandler):
                 for f in mf:
                     codes.add(f["fund_code"])
 
-                # 3. 逐一检查基金
-                for code in codes:
-                    curr_change, fund_name = get_realtime_change(code)
-                    if curr_change is None:
-                        continue
+                # 3. 并发查询所有基金实时行情（最多 20 个线程，避免超时）
+                def fetch_one(code):
+                    return code, get_realtime_change(code)
 
-                    if abs(curr_change) < threshold:
-                        continue
+                triggered = []  # 超过阈值的基金列表
+                with ThreadPoolExecutor(max_workers=20) as pool:
+                    futures = {pool.submit(fetch_one, c): c for c in codes}
+                    for future in as_completed(futures, timeout=8):
+                        try:
+                            code, (curr_change, fund_name) = future.result()
+                            if curr_change is not None and abs(curr_change) >= threshold:
+                                triggered.append((code, curr_change, fund_name))
+                        except Exception:
+                            pass
 
-                    # 4. 检查今日已发送次数
+                # 4. 对超阈值基金逐一检查历史并发信
+                for code, curr_change, fund_name in triggered:
                     hist = sb_get("alert_history", {
                         "user_id": f"eq.{user_id}",
                         "fund_code": f"eq.{code}",
@@ -191,12 +199,15 @@ class handler(BaseHTTPRequestHandler):
                     # 5. 发送邮件
                     ok = send_alert_email(receiver, fund_name, code, curr_change)
                     if ok:
-                        # 6. 记录发送历史
-                        sb_post("alert_history", {
-                            "user_id": user_id,
-                            "fund_code": code,
-                            "change_val": curr_change
-                        })
+                        # 6. 记录发送历史（失败不阻断）
+                        try:
+                            sb_post("alert_history", {
+                                "user_id": user_id,
+                                "fund_code": code,
+                                "change_val": curr_change
+                            })
+                        except Exception as e:
+                            print(f"写入 alert_history 失败（不影响发信）: {e}")
                         results.append(f"sent:{code}({curr_change}%) -> {receiver}")
 
             self._send(200, {"success": True, "count": len(results), "results": results})
