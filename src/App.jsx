@@ -63,9 +63,10 @@ function App() {
       setGroups(enrichedGroups);
       setMarketFundsData(loadedMarket);
 
-      // 初始化 activeTab 为第一个分组
+      // 初始化 activeTab 为第一个普通的基金分组
       if (enrichedGroups.length > 0 && !activeTab) {
-        setActiveTab(enrichedGroups[0].name);
+        const firstNormalGroup = enrichedGroups.find(g => !g.isMarket);
+        setActiveTab(firstNormalGroup ? firstNormalGroup.name : enrichedGroups[0].name);
       }
 
       // 批量拉取所有基金实时数据

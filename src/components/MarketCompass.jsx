@@ -179,7 +179,7 @@ export function MarketCompass({ funds, shortNames = {} }) {
             </div>
 
             {/* List Table */}
-            <div style={{ marginTop: '24px', maxHeight: '400px', overflowY: 'auto', borderRadius: '8px', border: '1px solid #334155' }}>
+            <div className="table-responsive-wrapper" style={{ marginTop: '24px', maxHeight: '400px', overflowY: 'auto', borderRadius: '8px', border: '1px solid #334155' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', color: '#e2e8f0' }}>
                     <thead style={{ position: 'sticky', top: 0, background: '#1e293b', zIndex: 1 }}>
                         <tr>

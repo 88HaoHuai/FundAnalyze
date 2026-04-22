@@ -122,7 +122,7 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, onRemove, 
     const colorClass = isPositive ? 'text-danger' : 'text-success';
 
     return (
-        <div className="card" style={{ padding: 'var(--spacing-3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-4)' }}>
+        <div className="card fund-card-mobile-stack" style={{ padding: 'var(--spacing-3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-4)' }}>
             {/* 1. Basic Info */}
             <div style={{ flex: 1, minWidth: 0, paddingRight: 'var(--spacing-2)' }}>
                 <h3 className="truncate" style={{ fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: '4px' }}>{fund.name}</h3>

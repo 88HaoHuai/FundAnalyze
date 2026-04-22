@@ -176,3 +176,63 @@ a {
   font-weight: 500;
   transition: all 0.2s ease;
 }
+
+/* 手机端自适应 (Responsive Additions) */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 var(--spacing-2);
+  }
+
+  .card {
+    padding: var(--spacing-3);
+  }
+
+  /* 顶部导航自适应展示 */
+  header.flex-between {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* FundCard 内容排布：换行显示 */
+  .fund-card-mobile-stack {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  
+  .fund-card-mobile-stack > div:first-child {
+    min-width: 100%;
+    margin-bottom: 2px;
+  }
+
+  .fund-card-mobile-stack > div:nth-child(2),
+  .fund-card-mobile-stack > div:nth-child(3) {
+    flex: 1 !important;
+    text-align: left !important;
+    align-items: flex-start !important;
+  }
+
+  .mobile-w-full {
+    width: 100% !important;
+    justify-content: space-between;
+  }
+
+  /* 市场风向标表格滑动 */
+  .table-responsive-wrapper {
+    overflow-x: auto;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Tab 按钮小一点 */
+  .btn, .btn-secondary {
+    padding: var(--spacing-1) var(--spacing-2);
+    font-size: 0.85rem;
+  }
+
+  /* 配置管理弹窗自适应 */
+  .mobile-modal {
+    width: 95vw !important;
+    max-height: 90vh !important;
+    padding: 10px !important;
+  }
+}

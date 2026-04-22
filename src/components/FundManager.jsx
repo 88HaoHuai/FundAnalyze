@@ -219,6 +219,7 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
       zIndex: 1000, padding: '1rem',
     }} onClick={onClose}>
       <div
+        className="mobile-modal"
         style={{
           width: '100%', maxWidth: '680px', maxHeight: '85vh',
           background: '#1e293b', borderRadius: '16px',
@@ -247,7 +248,7 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
         </div>
 
         {/* Section 切换 */}
-        <div style={{ display: 'flex', gap: '4px', padding: '12px 24px', borderBottom: '1px solid #334155' }}>
+        <div style={{ display: 'flex', gap: '4px', padding: '12px 24px', borderBottom: '1px solid #334155', flexWrap: 'wrap' }}>
           {sectionBtns.map(s => (
             <button key={s.key} onClick={() => setActiveSection(s.key)} style={{
               display: 'flex', alignItems: 'center', gap: '6px',
@@ -275,9 +276,9 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
 
           {/* ========== 基金分组区 ========== */}
           {activeSection === 'groups' && (
-            <div style={{ display: 'flex', gap: '16px', height: '100%' }}>
+            <div className="fund-card-mobile-stack" style={{ display: 'flex', gap: '16px', height: '100%' }}>
               {/* 左侧：分组列表 */}
-              <div style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                 <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', fontWeight: '600', letterSpacing: '0.05em' }}>
                   我的分组
                 </div>
