@@ -156,7 +156,7 @@ class handler(BaseHTTPRequestHandler):
                 g_ids = [g["id"] for g in groups]
                 if g_ids:
                     gf = sb_get("group_funds", {
-                        "group_id": f"in.({','.join(g_ids)})",
+                        "group_id": f"in.({','.join(str(i) for i in g_ids)})",
                         "select": "fund_code"
                     })
                     for f in gf:
