@@ -163,10 +163,10 @@ class handler(BaseHTTPRequestHandler):
                     for f in gf:
                         codes.add(f["fund_code"])
 
-                # b. 市场风向标
-                mf = sb_get("market_funds", {"user_id": f"eq.{user_id}", "select": "fund_code"})
-                for f in mf:
-                    codes.add(f["fund_code"])
+                # b. 市场风向标 (根据需求，不再监控市场风向标的涨跌提醒)
+                # mf = sb_get("market_funds", {"user_id": f"eq.{user_id}", "select": "fund_code"})
+                # for f in mf:
+                #     codes.add(f["fund_code"])
 
                 # 3. 并发查询所有基金实时行情（最多 20 个线程，避免超时）
                 def fetch_one(code):

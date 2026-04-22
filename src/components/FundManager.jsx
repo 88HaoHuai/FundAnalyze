@@ -504,7 +504,7 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
                 <ul style={{ fontSize: '11px', color: '#d97706', paddingLeft: '16px', margin: 0, lineHeight: '1.6' }}>
                   <li>系统每 10 分钟轮询一次实时估值。</li>
                   <li>同一基金每日限发 2 封提醒邮件。</li>
-                  <li>监控范围包含您已添加的所有基金和风向标板块。</li>
+                  <li>监控范围仅包含您已添加的所有分组基金。</li>
                 </ul>
               </div>
 
