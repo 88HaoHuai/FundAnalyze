@@ -54,7 +54,10 @@ def send_alert_email(to_email, fund_name, fund_code, current_change):
         print(f"SMTP 配置缺失，跳过发件给 {to_email}")
         return False
 
-    subject = f"【涨跌提醒】{fund_name} ({fund_code}) 变动 {current_change}%"
+    trend_icon = "📈" if current_change > 0 else "📉"
+    trend_text = "大涨监控" if current_change > 0 else "大跌预警"
+    sign = "+" if current_change > 0 else ""
+    subject = f"{trend_icon}【{trend_text}】{fund_name} ({fund_code}) 当前变动 {sign}{current_change}%"
     body = (
         f"您好，\n\n"
         f"您关注的基金发生较大波动：\n"
