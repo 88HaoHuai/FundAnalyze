@@ -3,7 +3,9 @@ import { X, Plus, Trash2, Edit2, Check, ChevronRight, Database, Layers, BarChart
 import {
   createGroup, deleteGroup, renameGroup,
   addMarketFund, removeMarketFund, renameMarketFund,
+  fetchAlertConfig, updateAlertConfig
 } from '../services/supabaseHelpers';
+import { Mail, Bell, Settings } from 'lucide-react';
 
 // 通用小标签
 function Badge({ children, color = '#4f46e5' }) {
@@ -82,6 +84,32 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
   const [newMarketName, setNewMarketName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  // 提醒配置状态
+  const [alertConfig, setAlertConfig] = useState({
+    is_enabled: true,
+    threshold: 2.0,
+    email_receiver: ''
+  });
+
+  // 初始化加载提醒配置
+  useState(() => {
+    fetchAlertConfig().then(data => {
+      if (data) setAlertConfig(data);
+    });
+  }, []);
+
+  const handleSaveAlerts = async () => {
+    setSaving(true);
+    try {
+      await updateAlertConfig(alertConfig);
+      await onUpdate();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // 找到选中的分组对象
   const selectedGroup = groups.find(g => g.id === selectedGroupId);
@@ -180,6 +208,7 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
   const sectionBtns = [
     { key: 'groups', label: '基金分组', icon: <Layers size={15} /> },
     { key: 'market', label: '市场风向标', icon: <BarChart2 size={15} /> },
+    { key: 'alerts', label: '邮件提醒', icon: <Mail size={15} /> },
   ];
 
   return (
@@ -404,6 +433,91 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
                   <Plus size={14} /> 添加
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ========== 邮件提醒设置区 ========== */}
+          {activeSection === 'alerts' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '400px', margin: '0 auto', padding: '10px 0' }}>
+              <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                <div style={{ width: '50px', height: '50px', background: 'rgba(79,70,229,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <Bell size={24} color="#818cf8" />
+                </div>
+                <h3 style={{ fontSize: '16px', color: '#f8fafc', fontWeight: '600' }}>涨跌幅实时提醒</h3>
+                <p style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>当日涨跌达到设定阈值时，自动向您发送提醒邮件</p>
+              </div>
+
+              {/* 总开关 */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', background: '#0f172a', borderRadius: '12px', border: '1px solid #334155' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Settings size={18} color="#94a3b8" />
+                  <span style={{ fontSize: '14px', color: '#e2e8f0' }}>开启邮件提醒</span>
+                </div>
+                <div 
+                  onClick={() => setAlertConfig({ ...alertConfig, is_enabled: !alertConfig.is_enabled })}
+                  style={{
+                    width: '44px', height: '22px', borderRadius: '11px', 
+                    background: alertConfig.is_enabled ? '#4f46e5' : '#334155',
+                    position: 'relative', cursor: 'pointer', transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{
+                    width: '18px', height: '18px', background: 'white', borderRadius: '50%',
+                    position: 'absolute', top: '2px', 
+                    left: alertConfig.is_enabled ? '24px' : '2px',
+                    transition: 'all 0.2s'
+                  }} />
+                </div>
+              </div>
+
+              {/* 阈值设置 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <label style={{ fontSize: '13px', color: '#94a3b8' }}>触发阈值</label>
+                    <span style={{ fontSize: '14px', color: '#f8fafc', fontWeight: 'bold' }}>± {alertConfig.threshold}%</span>
+                </div>
+                <input 
+                    type="range" min="0.5" max="10" step="0.1"
+                    value={alertConfig.threshold}
+                    onChange={e => setAlertConfig({ ...alertConfig, threshold: parseFloat(e.target.value) })}
+                    disabled={!alertConfig.is_enabled}
+                    style={{ width: '100%', cursor: 'pointer', accentColor: '#4f46e5' }}
+                />
+              </div>
+
+              {/* 邮箱设置 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '13px', color: '#94a3b8' }}>接收邮箱（选填）</label>
+                <input 
+                  value={alertConfig.email_receiver}
+                  onChange={e => setAlertConfig({ ...alertConfig, email_receiver: e.target.value })}
+                  placeholder="留空则发送至您的注册邮箱"
+                  disabled={!alertConfig.is_enabled}
+                  style={{
+                    padding: '10px 14px', background: '#0f172a', border: '1px solid #334155',
+                    borderRadius: '8px', color: '#f8fafc', fontSize: '14px', outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ padding: '12px', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '8px' }}>
+                <ul style={{ fontSize: '11px', color: '#d97706', paddingLeft: '16px', margin: 0, lineHeight: '1.6' }}>
+                  <li>系统每 10 分钟轮询一次实时估值。</li>
+                  <li>同一基金每日限发 2 封提醒邮件。</li>
+                  <li>监控范围包含您已添加的所有基金和风向标板块。</li>
+                </ul>
+              </div>
+
+              <button 
+                onClick={handleSaveAlerts}
+                disabled={saving}
+                style={{
+                  marginTop: '10px', padding: '12px', background: 'linear-gradient(135deg, #4f46e5, #3b82f6)',
+                  border: 'none', borderRadius: '10px', color: 'white', fontWeight: 'bold', cursor: 'pointer'
+                }}
+              >
+                {saving ? '保存中...' : '保存提醒配置'}
+              </button>
             </div>
           )}
         </div>

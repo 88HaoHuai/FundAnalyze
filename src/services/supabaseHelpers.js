@@ -162,3 +162,53 @@ export async function renameMarketFund(fundCode, newShortName) {
     .eq('fund_code', fundCode);
   if (error) throw error;
 }
+
+// ============================================================
+// user_alert_config 相关操作
+// ============================================================
+
+/**
+ * 获取当前用户的提醒配置
+ */
+export async function fetchAlertConfig() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from('user_alert_config')
+    .select('*')
+    .eq('user_id', user.id)
+    .single();
+
+  // 如果没有配置，返回默认值（不报错，方便前端处理）
+  if (error && error.code === 'PGRST116') {
+    return {
+      user_id: user.id,
+      is_enabled: true,
+      threshold: 2.0,
+      email_receiver: ''
+    };
+  }
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * 更新或创建提醒配置
+ */
+export async function updateAlertConfig(config) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('未登录');
+
+  const { error } = await supabase
+    .from('user_alert_config')
+    .upsert({
+      user_id: user.id,
+      ...config,
+      updated_at: new Date().toISOString()
+    });
+
+  if (error) throw error;
+}
+
