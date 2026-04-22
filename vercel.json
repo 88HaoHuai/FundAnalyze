@@ -16,11 +16,5 @@
             "source": "/api/stock",
             "destination": "/api/stock-proxy"
         }
-    ],
-    "crons": [
-        {
-            "path": "/api/alerts_check",
-            "schedule": "*/10 * * * *"
-        }
     ]
 }
