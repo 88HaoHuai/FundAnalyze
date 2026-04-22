@@ -3,6 +3,7 @@ import json
 import urllib.parse
 import requests
 import re
+import traceback
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
