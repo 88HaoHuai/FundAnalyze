@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Edit2, Check, ChevronRight, Database, Layers, BarChart2 } from 'lucide-react';
 import {
   createGroup, deleteGroup, renameGroup,
@@ -93,7 +93,7 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
   });
 
   // 初始化加载提醒配置
-  useState(() => {
+  useEffect(() => {
     fetchAlertConfig().then(data => {
       if (data) setAlertConfig(data);
     });
