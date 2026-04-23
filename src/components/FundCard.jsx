@@ -15,9 +15,29 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, position, 
             <div className="card" style={{ padding: 'var(--spacing-3)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {/* 顶部：标题 + 徽章区 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="flex-between">
                     <h3 style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
                         {fund.name}
                     </h3>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        {onOpenPerspective && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onOpenPerspective(); }} 
+                                style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+                            >
+                                透视
+                            </button>
+                        )}
+                        {onRemove && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onRemove(); }} 
+                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+                            >
+                                删除
+                            </button>
+                        )}
+                    </div>
+                </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                         <span className="text-secondary" style={{ fontSize: 'var(--font-size-sm)' }}>{fund.code}</span>
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#475569', color: 'white' }}>
@@ -102,9 +122,29 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, position, 
         <div className="card" style={{ padding: 'var(--spacing-3)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* 顶部：标题 + 徽章区 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <h3 style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                    {fund.name}
-                </h3>
+                <div className="flex-between">
+                    <h3 style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                        {fund.name}
+                    </h3>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        {onOpenPerspective && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onOpenPerspective(); }} 
+                                style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+                            >
+                                透视
+                            </button>
+                        )}
+                        {onRemove && (
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onRemove(); }} 
+                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+                            >
+                                删除
+                            </button>
+                        )}
+                    </div>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     <span className="text-secondary" style={{ fontSize: 'var(--font-size-sm)' }}>{fund.code}</span>
                     <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: (fund.code.startsWith('51') || fund.code.startsWith('15')) ? '#3b82f6' : '#2563eb', color: 'white' }}>

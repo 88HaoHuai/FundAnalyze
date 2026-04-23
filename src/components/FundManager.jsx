@@ -3,7 +3,7 @@ import { X, Plus, Trash2, Edit2, Check, ChevronRight, Database, Layers, BarChart
 import {
   createGroup, deleteGroup, renameGroup,
   addMarketFund, removeMarketFund, renameMarketFund,
-  fetchAlertConfig, updateAlertConfig
+  fetchAlertConfig, updateAlertConfig, removeFundFromGroup
 } from '../services/supabaseHelpers';
 import { Mail, Bell, Settings } from 'lucide-react';
 
@@ -160,6 +160,19 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
       await onUpdate();
     } catch (e) {
       setError(e.message);
+    }
+  };
+
+  // 移除分组内的基金
+  const handleDeleteFund = async (groupId, fundCode) => {
+    setSaving(true);
+    try {
+      await removeFundFromGroup(groupId, fundCode);
+      await onUpdate();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -348,7 +361,7 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
                           <EditableRow
                             key={code}
                             label={code}
-                            onDelete={() => {}}
+                            onDelete={() => handleDeleteFund(selectedGroup.id, code)}
                             onRename={null}
                           />
                         ))
