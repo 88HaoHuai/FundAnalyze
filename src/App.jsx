@@ -158,6 +158,11 @@ function App() {
                   is_auto_invest: position?.isAutoInvest || false
               })
           });
+          
+          if (!res.ok) {
+              throw new Error(`请求异常 (状态码: ${res.status})，可能是云端服务响应超时。`);
+          }
+          
           const json = await res.json();
           if (json.success) {
               setAiDiagnostic({ loading: false, fund, result: json.data });

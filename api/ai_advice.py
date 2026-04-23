@@ -5,7 +5,7 @@ import os
 from http.server import BaseHTTPRequestHandler
 
 API_KEY = "sk-deoeqqlzkxpwclsbcibwgaljzmfxhhsncaebnswqyytzbghj"
-MODEL = "Pro/Qwen/Qwen2.5-7B-Instruct"
+MODEL = "Qwen/Qwen2.5-7B-Instruct"
 
 def generate_advice(fund_name, amount, est_change, drawdown, rsi, is_auto_invest):
     try:
@@ -22,6 +22,7 @@ def generate_advice(fund_name, amount, est_change, drawdown, rsi, is_auto_invest
 }}
 3. action 请在 ["持仓待涨", "逢低补仓", "止盈止损", "暂停定投", "分批建仓", "保持定投"] 中选择。
 4. 结合 `is_auto_invest` 状态给出合理建议。如果是定投，下跌多为机会；如果是单笔重仓（amount 较高且不是定投），请注意控制回撤风险。
+5. IMPORTANT: reasoning 必须非常简短！请用一两句话概括，绝对不要超过40个字，以加快生成速度。
 """
         user_content = (
             f"基金名称：{fund_name}\n"
