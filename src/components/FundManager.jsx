@@ -134,9 +134,17 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
         throw new Error(json.error || '执行失败');
       }
       alert(`结算完成！成功处理了 ${json.processed || 0} 支基金。`);
-      await onUpdate();
+      try {
+          await onUpdate();
+      } catch (updateErr) {
+          console.warn('数据自动刷新失败，请手动刷新页面:', updateErr);
+      }
     } catch (e) {
-      setError('手动结算失败: ' + e.message);
+      if (e.message.includes('pattern')) {
+          setError('数据格式同步异常，请刷新页面重试');
+      } else {
+          setError('手动结算失败: ' + e.message);
+      }
     } finally {
       setInvesting(false);
     }

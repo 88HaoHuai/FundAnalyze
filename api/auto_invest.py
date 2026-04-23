@@ -5,8 +5,9 @@ import requests
 from datetime import datetime, timezone, timedelta
 import time
 
-def get_beijing_date():
-    return (datetime.now(timezone.utc) + timedelta(hours=8)).date()
+def get_beijing_date_str():
+    # 强制返回 YYYY-MM-DD 字符串，确保前端正则匹配不出错
+    return (datetime.now(timezone.utc) + timedelta(hours=8)).strftime('%Y-%m-%d')
 
 # ============================================================
 # 环境变量配置
@@ -51,8 +52,9 @@ def sb_patch(table, query_params, body):
 # ============================================================
 def is_trading_day():
     """粗略判断今天是否为交易日（周一到周五），按照北京时间计算"""
-    today_weekday = get_beijing_date().weekday()
-    return today_weekday < 5
+    # 获取北京时间当前的星期几 (0-6)
+    bj_now = datetime.now(timezone.utc) + timedelta(hours=8)
+    return bj_now.weekday() < 5
 
 # ============================================================
 # 主 Handler
@@ -90,7 +92,7 @@ class handler(BaseHTTPRequestHandler):
             self._send(200, {"message": "非交易日，跳过定投结算"})
             return
 
-        today_str = get_beijing_date().isoformat()
+        today_str = get_beijing_date_str()
         results = []
 
         try:
