@@ -84,6 +84,7 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
   const [newMarketName, setNewMarketName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [investing, setInvesting] = useState(false);
 
   // 提醒配置状态
   const [alertConfig, setAlertConfig] = useState({
@@ -120,6 +121,26 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
   const marketGroup = groups.find(g => g.isMarket);
 
   const { codes: marketCodes = [], shortNames: marketShortNames = {} } = marketFundsData || {};
+
+  // 手动执行定投结算
+  const handleManualInvest = async () => {
+    if (!window.confirm('确认手动执行今日的定投本金结算吗？(今日已结算过的基金将自动跳过)')) return;
+    setInvesting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/auto_invest?manual=true', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || '执行失败');
+      }
+      alert(`结算完成！成功处理了 ${json.processed || 0} 支基金。`);
+      await onUpdate();
+    } catch (e) {
+      setError('手动结算失败: ' + e.message);
+    } finally {
+      setInvesting(false);
+    }
+  };
 
   // 新增分组
   const handleAddGroup = async () => {
@@ -340,6 +361,23 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
                     borderRadius: '7px', color: '#a5b4fc', cursor: 'pointer',
                   }}>
                     <Plus size={14} />
+                  </button>
+                </div>
+
+                {/* 手动触发定投 */}
+                <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px dashed #334155' }}>
+                  <button 
+                    onClick={handleManualInvest} 
+                    disabled={investing} 
+                    style={{
+                      width: '100%', padding: '8px', 
+                      background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)',
+                      borderRadius: '8px', color: '#10b981', fontSize: '13px', fontWeight: '500',
+                      cursor: investing ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                      display: 'flex', justifyContent: 'center', alignItems: 'center'
+                    }}
+                  >
+                    {investing ? '结算中...' : '▶ 手动结算今日定投'}
                   </button>
                 </div>
               </div>

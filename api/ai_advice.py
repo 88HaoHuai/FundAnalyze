@@ -39,8 +39,8 @@ def generate_advice(fund_name, amount, est_change, drawdown, rsi, is_auto_invest
 ### 输入数据：
 - 基金名称：{fund_name}
 - 持仓金额：{amount}
-- 当日估算涨跌幅：{daily_change}
-- 最大回撤距高点：{max_drawdown}
+- 当日估算涨跌幅：{est_change}
+- 最大回撤距高点：{drawdown}
 - RSI指标：{rsi}
 - 是否定投：{is_auto_invest}
 """

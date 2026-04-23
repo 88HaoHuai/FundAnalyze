@@ -62,9 +62,18 @@ class handler(BaseHTTPRequestHandler):
         self.handle_request()
         
     def handle_request(self):
-        # 安全校验 (可选): 针对 cron 触发，Vercel 默认带 CRON_SECRET 头
+        # 允许手动触发（跳过 cron_secret 校验和交易日限制）
+        is_manual = False
+        try:
+            from urllib.parse import urlparse, parse_qs
+            query = parse_qs(urlparse(self.path).query)
+            if query.get("manual", [""])[0].lower() == "true":
+                is_manual = True
+        except:
+            pass
+
         cron_secret = os.environ.get("CRON_SECRET", "")
-        if cron_secret:
+        if cron_secret and not is_manual:
             auth_header = self.headers.get("Authorization", "")
             if auth_header != f"Bearer {cron_secret}":
                 self._send(401, {"error": "Unauthorized"})
@@ -74,7 +83,7 @@ class handler(BaseHTTPRequestHandler):
             self._send(500, {"error": "Supabase 环境变量缺失"})
             return
             
-        if not is_trading_day():
+        if not is_manual and not is_trading_day():
             self._send(200, {"message": "非交易日，跳过定投结算"})
             return
 
