@@ -35,7 +35,34 @@ export default defineConfig({
               res.statusCode = 200;
               res.end(stdout);
             });
-          } else if (req.url.startsWith('/api/ai') && req.method === 'POST') {
+          } else if (req.url === '/api/ai_advice' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', () => {
+              try {
+                const payload = JSON.parse(body);
+                console.log(`[AI Advice] Processing: ${payload.fund_name}`);
+                const scriptPath = path.resolve(__dirname, 'src/services/fetch_advice.py');
+                const safeName = (payload.fund_name || '').replace(/"/g, '\\"').replace(/\n/g, ' ');
+                const cmd = `python3 "${scriptPath}" "${safeName}" "${payload.amount || 0}" "${payload.est_change || 0}" "${payload.drawdown || 0}" "${payload.rsi || 50}" "${payload.is_auto_invest || false}"`;
+
+                exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  if (error) {
+                    console.error("[AI Advice] Error:", error);
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, error: error.message }));
+                    return;
+                  }
+                  res.statusCode = 200;
+                  res.end(stdout);
+                });
+              } catch (e) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: 'Invalid Payload' }));
+              }
+            });
+          } else if (req.url === '/api/ai' && req.method === 'POST') {
             let body = '';
             req.on('data', chunk => {
               body += chunk.toString();
@@ -100,7 +127,33 @@ export default defineConfig({
               res.statusCode = 200;
               res.end(stdout);
             });
-          } else if (req.url.startsWith('/api/ai') && req.method === 'POST') {
+          } else if (req.url === '/api/ai_advice' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', () => {
+              try {
+                const payload = JSON.parse(body);
+                console.log(`[Preview AI Advice] Processing: ${payload.fund_name}`);
+                const scriptPath = path.resolve(__dirname, 'src/services/fetch_advice.py');
+                const safeName = (payload.fund_name || '').replace(/"/g, '\\"').replace(/\n/g, ' ');
+                const cmd = `python3 "${scriptPath}" "${safeName}" "${payload.amount || 0}" "${payload.est_change || 0}" "${payload.drawdown || 0}" "${payload.rsi || 50}" "${payload.is_auto_invest || false}"`;
+
+                exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  if (error) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, error: error.message }));
+                    return;
+                  }
+                  res.statusCode = 200;
+                  res.end(stdout);
+                });
+              } catch (e) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: 'Invalid Payload' }));
+              }
+            });
+          } else if (req.url === '/api/ai' && req.method === 'POST') {
             let body = '';
             req.on('data', chunk => {
               body += chunk.toString();

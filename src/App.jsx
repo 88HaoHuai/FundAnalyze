@@ -7,9 +7,11 @@ import { MarketCompass } from './components/MarketCompass';
 import { NewsBoard } from './components/NewsBoard';
 import { fundApi } from './services/fundApi';
 import { supabase } from './services/supabaseClient';
-import { fetchGroups, fetchMarketFunds, addFundToGroup, removeFundFromGroup } from './services/supabaseHelpers';
+import { fetchGroups, fetchMarketFunds, addFundToGroup, removeFundFromGroup, updateFundPosition } from './services/supabaseHelpers';
 import { AuthPage } from './pages/AuthPage';
 import { LogOut, Settings } from 'lucide-react';
+import { AIDiagnosticModal } from './components/AIDiagnosticModal';
+import { PositionModal } from './components/PositionModal';
 
 function App() {
   // Auth 状态
@@ -26,6 +28,9 @@ function App() {
   const [showManager, setShowManager] = useState(false);
   const [prevChanges, setPrevChanges] = useState({});
   const [analysisData, setAnalysisData] = useState({});
+  
+  const [aiDiagnostic, setAiDiagnostic] = useState(null);
+  const [positionModalData, setPositionModalData] = useState(null);
 
   // ─── 监听 Supabase Auth 状态 ──────────────────────────────
   useEffect(() => {
@@ -135,6 +140,42 @@ function App() {
     } catch (e) {
       console.error('移除基金失败', e);
     }
+  };
+
+  // ─── 处理 AI 诊断 ──────────────────────────────────────────
+  const handleAskAI = async (fund, position) => {
+      setAiDiagnostic({ loading: true, fund });
+      try {
+          const res = await fetch('/api/ai_advice', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  fund_name: fund.name,
+                  amount: position?.amount || 0,
+                  est_change: fund.estChange || 0,
+                  drawdown: analysisData[fund.code]?.maxDrawdown || 0,
+                  rsi: analysisData[fund.code]?.rsi || 50,
+                  is_auto_invest: position?.isAutoInvest || false
+              })
+          });
+          const json = await res.json();
+          if (json.success) {
+              setAiDiagnostic({ loading: false, fund, result: json.data });
+          } else {
+              setAiDiagnostic({ loading: false, fund, error: json.error });
+          }
+      } catch (e) {
+          setAiDiagnostic({ loading: false, fund, error: e.message });
+      }
+  };
+
+  // ─── 保存持仓 ─────────────────────────────────────────────
+  const handleSavePosition = async (fund, amount, isAutoInvest, autoInvestAmount) => {
+      const activeGroup = groups.find(g => g.name === activeTab);
+      if (!activeGroup) return;
+      await updateFundPosition(activeGroup.id, fund.code, amount, isAutoInvest, autoInvestAmount);
+      setPositionModalData(null);
+      await loadAllData();
   };
 
   // ─── 10 秒轮询当前 Tab ────────────────────────────────────
@@ -302,8 +343,11 @@ function App() {
                       industryLabel={activeGroup?.shortNames?.[fund.code]}
                       prevChange={prevChanges[fund.code]}
                       analysis={analysisData[fund.code]}
+                      position={activeGroup?.positions?.[fund.code]}
                       onRemove={() => handleRemove(fund.code)}
                       onOpenPerspective={() => setSelectedFund(fund)}
+                      onAskAI={handleAskAI}
+                      onSetPosition={(f, p) => setPositionModalData({ fund: f, position: p })}
                     />
                   ))}
                 </>
@@ -338,6 +382,19 @@ function App() {
           }}
           onClose={() => setShowManager(false)}
         />
+      )}
+
+      {aiDiagnostic && (
+          <AIDiagnosticModal diagnostic={aiDiagnostic} onClose={() => setAiDiagnostic(null)} />
+      )}
+
+      {positionModalData && (
+          <PositionModal 
+              fund={positionModalData.fund} 
+              position={positionModalData.position} 
+              onSave={handleSavePosition} 
+              onClose={() => setPositionModalData(null)} 
+          />
       )}
     </div>
   );

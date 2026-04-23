@@ -16,5 +16,11 @@
             "source": "/api/stock",
             "destination": "/api/stock-proxy"
         }
+    ],
+    "crons": [
+        {
+            "path": "/api/auto_invest",
+            "schedule": "30 15 * * 1-5"
+        }
     ]
 }

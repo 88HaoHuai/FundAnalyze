@@ -18,26 +18,40 @@ export async function fetchGroups() {
   if (groupsError) throw groupsError;
   if (!groups || groups.length === 0) return [];
 
-  // 拉取所有分组的基金代码
+  // 拉取所有分组的基金代码及持仓信息
   const groupIds = groups.map(g => g.id);
-  const { data: gFunds, error: gFundsError } = await supabase
+  const { data: gFunds, error } = await supabase
     .from('group_funds')
-    .select('group_id, fund_code, sort_order')
+    .select('group_id, fund_code, sort_order, amount, is_auto_invest, auto_invest_amount')
     .in('group_id', groupIds)
     .order('sort_order', { ascending: true });
-
-  if (gFundsError) throw gFundsError;
+    
+  if (error) {
+    console.error("查询持仓字段失败，请确认是否已执行刷新缓存的 SQL", error);
+    throw error;
+  }
 
   // 拼装成兼容前端的格式
-  return groups.map(g => ({
-    id: g.id,
-    name: g.name,
-    isMarket: g.is_market,
-    sort_order: g.sort_order,
-    codes: (gFunds || [])
-      .filter(f => f.group_id === g.id)
-      .map(f => f.fund_code),
-  }));
+  return groups.map(g => {
+    const groupFunds = (gFunds || []).filter(f => f.group_id === g.id);
+    const codes = groupFunds.map(f => f.fund_code);
+    const positions = {};
+    groupFunds.forEach(f => {
+      positions[f.fund_code] = {
+        amount: f.amount || 0,
+        isAutoInvest: f.is_auto_invest || false,
+        autoInvestAmount: f.auto_invest_amount || 0
+      };
+    });
+    return {
+      id: g.id,
+      name: g.name,
+      isMarket: g.is_market,
+      sort_order: g.sort_order,
+      codes: codes,
+      positions: positions
+    };
+  });
 }
 
 /**
@@ -103,6 +117,27 @@ export async function removeFundFromGroup(groupId, fundCode) {
     .eq('group_id', groupId)
     .eq('fund_code', fundCode);
   if (error) throw error;
+}
+
+/**
+ * 更新基金的持仓和定投状态
+ */
+export async function updateFundPosition(groupId, fundCode, amount, isAutoInvest, autoInvestAmount) {
+  const { data, error } = await supabase
+    .from('group_funds')
+    .update({ amount, is_auto_invest: isAutoInvest, auto_invest_amount: autoInvestAmount })
+    .eq('group_id', groupId)
+    .eq('fund_code', fundCode)
+    .select();
+    
+  if (error) {
+      console.error("Supabase Update Error:", error);
+      throw error;
+  }
+  
+  if (!data || data.length === 0) {
+      throw new Error("更新未能命中任何行，可能原因：数据库中无此记录，或被 RLS (行级安全策略) 的 UPDATE 规则拦截。");
+  }
 }
 
 // ============================================================
@@ -210,5 +245,26 @@ export async function updateAlertConfig(config) {
     });
 
   if (error) throw error;
+}
+
+// ============================================================
+// 日志相关操作
+// ============================================================
+
+/**
+ * 获取指定基金的定投日志（时间倒序）
+ */
+export async function fetchAutoInvestLogs(fundCode) {
+  const { data, error } = await supabase
+    .from('auto_invest_logs')
+    .select('*')
+    .eq('fund_code', fundCode)
+    .order('date', { ascending: false });
+    
+  if (error) {
+      console.warn("未获取到定投日志:", error);
+      return [];
+  }
+  return data;
 }
 

@@ -1,10 +1,15 @@
 import { TrendingUp, TrendingDown, PieChart, Clock } from 'lucide-react';
 
-export function FundCard({ fund, industryLabel, prevChange, analysis, onRemove, onOpenPerspective }) {
+export function FundCard({ fund, industryLabel, prevChange, analysis, position, onRemove, onOpenPerspective, onAskAI, onSetPosition }) {
+    // 解析持仓数据
+    const amount = position?.amount || 0;
+    const isAutoInvest = position?.isAutoInvest || false;
+
     // ── noData 卡片（QDII 等无盘中估值基金）——展示历史数据 ──────
     if (fund.noData) {
         const pdChange = fund.prevDayChange != null ? parseFloat(fund.prevDayChange) : null;
         const pdIsPositive = pdChange != null ? pdChange >= 0 : null;
+        const profit = amount && pdChange != null ? (amount * pdChange / 100).toFixed(2) : '--';
 
         return (
             <div className="card" style={{ padding: 'var(--spacing-3)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -26,6 +31,11 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, onRemove, 
                                 {industryLabel}
                             </span>
                         )}
+                        {isAutoInvest && (
+                            <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#f59e0b', color: 'white' }}>
+                                定投
+                            </span>
+                        )}
                         {analysis && (
                             <>
                                 <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.05)', color: '#cbd5e1', border: '1px solid #334155' }}>
@@ -43,16 +53,16 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, onRemove, 
 
                 {/* 底部：数据网格 */}
                 <div style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '12px', borderRadius: '8px'
+                    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '12px 8px', borderRadius: '8px'
                 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         {pdChange != null ? (
                             <>
-                                <span className={pdIsPositive ? 'text-danger' : 'text-success'} style={{ fontWeight: '600', fontSize: '15px' }}>
+                                <span className={pdIsPositive ? 'text-danger' : 'text-success'} style={{ fontWeight: '600', fontSize: '14px' }}>
                                     {pdIsPositive ? '+' : ''}{pdChange.toFixed(2)}%
                                 </span>
-                                <span className="text-secondary" style={{ fontSize: '10px' }}>Previous Day</span>
+                                <span className="text-secondary" style={{ fontSize: '9px', textAlign: 'center' }}>Previous Day</span>
                             </>
                         ) : (
                             <span className="text-secondary" style={{ fontSize: '12px' }}>--</span>
@@ -61,17 +71,22 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, onRemove, 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         {fund.nav ? (
                             <>
-                                <span style={{ fontWeight: '600', color: '#e2e8f0', fontSize: '15px' }}>{fund.nav}</span>
-                                <span className="text-secondary" style={{ fontSize: '10px' }}>{fund.navDate || '净值'}</span>
+                                <span style={{ fontWeight: '600', color: '#e2e8f0', fontSize: '14px' }}>{fund.nav}</span>
+                                <span className="text-secondary" style={{ fontSize: '9px', textAlign: 'center' }}>{fund.navDate || '净值'}</span>
                             </>
                         ) : (
                             <span className="text-secondary" style={{ fontSize: '12px' }}>--</span>
                         )}
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                        <button className="btn-secondary" onClick={(e) => { e.stopPropagation(); onOpenPerspective(); }} style={{ padding: '4px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', border: 'none', backgroundColor: 'rgba(255,255,255,0.05)' }} title="Perspective">
-                            <PieChart size={14} /> 透视
-                        </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation(); if(onAskAI) onAskAI(fund, position); }}>
+                        <span className="text-success" style={{ fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>✨ 诊断</span>
+                        <span className="text-secondary" style={{ fontSize: '9px', textAlign: 'center' }}>Confidence</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); if(onSetPosition) onSetPosition(fund, position); }}>
+                        <span className={pdIsPositive ? 'text-danger' : 'text-success'} style={{ fontWeight: '600', fontSize: '14px' }}>
+                            {profit !== '--' ? `${pdIsPositive ? '+' : ''}${profit}` : '--'}
+                        </span>
+                        <span className="text-secondary" style={{ fontSize: '9px', textAlign: 'center' }}>Yesterday Profit</span>
                     </div>
                 </div>
             </div>
@@ -81,6 +96,7 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, onRemove, 
     // ── 正常卡片 ──────────────────────────────────────────────────
     const isPositive = Number(fund.estChange) >= 0;
     const colorClass = isPositive ? 'text-danger' : 'text-success';
+    const liveProfit = amount && fund.estChange ? (amount * parseFloat(fund.estChange) / 100).toFixed(2) : '--';
 
     return (
         <div className="card" style={{ padding: 'var(--spacing-3)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -97,6 +113,11 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, onRemove, 
                     {industryLabel && (
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#8b5cf6', color: 'white' }}>
                             {industryLabel}
+                        </span>
+                    )}
+                    {isAutoInvest && (
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#f59e0b', color: 'white' }}>
+                            定投
                         </span>
                     )}
                     {analysis && (
@@ -117,31 +138,36 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, onRemove, 
 
             {/* 底部：数据网格 */}
             <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px',
-                backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '12px', borderRadius: '8px'
+                display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '12px 8px', borderRadius: '8px'
             }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                     {prevChange ? (
                         <>
-                            <span className={Number(prevChange.prevChange) >= 0 ? 'text-danger' : 'text-success'} style={{ fontWeight: '600', fontSize: '15px' }}>
+                            <span className={Number(prevChange.prevChange) >= 0 ? 'text-danger' : 'text-success'} style={{ fontWeight: '600', fontSize: '14px' }}>
                                 {Number(prevChange.prevChange) >= 0 ? '+' : ''}{prevChange.prevChange}%
                             </span>
-                            <span className="text-secondary" style={{ fontSize: '10px' }}>Previous Day</span>
+                            <span className="text-secondary" style={{ fontSize: '9px', textAlign: 'center' }}>Previous Day</span>
                         </>
                     ) : (
                         <span className="text-secondary" style={{ fontSize: '12px' }}>--</span>
                     )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                    <span className={colorClass} style={{ fontWeight: '600', fontSize: '15px' }}>
+                    <span className={colorClass} style={{ fontWeight: '600', fontSize: '14px' }}>
                         {isPositive ? '+' : ''}{fund.estChange}%
                     </span>
-                    <span className="text-secondary" style={{ fontSize: '10px' }}>Real-time Return</span>
+                    <span className="text-secondary" style={{ fontSize: '9px', textAlign: 'center' }}>Real-time Return</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <button className="btn-secondary" onClick={(e) => { e.stopPropagation(); onOpenPerspective(); }} style={{ padding: '4px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', border: 'none', backgroundColor: 'rgba(255,255,255,0.05)' }} title="Perspective">
-                        <PieChart size={14} /> 透视
-                    </button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => { e.stopPropagation(); if(onAskAI) onAskAI(fund, position); }}>
+                    <span className="text-success" style={{ fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>✨ 诊断</span>
+                    <span className="text-secondary" style={{ fontSize: '9px', textAlign: 'center' }}>Confidence</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); if(onSetPosition) onSetPosition(fund, position); }}>
+                    <span className={colorClass} style={{ fontWeight: '600', fontSize: '14px' }}>
+                        {liveProfit !== '--' ? `${isPositive ? '+' : ''}${liveProfit}` : '--'}
+                    </span>
+                    <span className="text-secondary" style={{ fontSize: '9px', textAlign: 'center' }}>Live Profit</span>
                 </div>
             </div>
         </div>
