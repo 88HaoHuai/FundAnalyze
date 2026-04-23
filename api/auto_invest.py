@@ -97,20 +97,18 @@ class handler(BaseHTTPRequestHandler):
                 "auto_invest_amount": "gt.0"
             })
 
-            # 2. 遍历执行
-            for record in funds_to_invest:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            def process_fund(record):
                 group_id = record.get("group_id")
                 fund_code = record.get("fund_code")
                 amount = record.get("amount") or 0
                 auto_amount = record.get("auto_invest_amount") or 0
                 last_date = record.get("last_auto_invest_date")
 
-                # 防重检查：今天是否已经结算过？
                 if last_date == today_str:
-                    results.append(f"skipped (already settled): {fund_code}")
-                    continue
+                    return f"skipped (already settled): {fund_code}"
                 
-                # 3. 计算并更新金额
                 new_amount = round(amount + auto_amount, 2)
                 try:
                     sb_patch("group_funds", {
@@ -121,7 +119,6 @@ class handler(BaseHTTPRequestHandler):
                         "last_auto_invest_date": today_str
                     })
                     
-                    # 4. 记录日志
                     try:
                         sb_post("auto_invest_logs", {
                             "group_id": group_id,
@@ -133,10 +130,19 @@ class handler(BaseHTTPRequestHandler):
                     except Exception as log_err:
                         print(f"写入日志失败 (但不影响本金更新): {log_err}")
                         
-                    results.append(f"success: {fund_code} ({amount} -> {new_amount})")
+                    return f"success: {fund_code} ({amount} -> {new_amount})"
                 except Exception as e:
                     print(f"更新 {fund_code} 失败: {e}")
-                    results.append(f"error: {fund_code}")
+                    return f"error: {fund_code}"
+
+            # 使用线程池加速，避免几十个持仓导致 Vercel 10s 强制超时
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(process_fund, r) for r in funds_to_invest]
+                for future in as_completed(futures):
+                    try:
+                        results.append(future.result())
+                    except Exception as e:
+                        results.append(f"error (future): {str(e)}")
 
             self._send(200, {
                 "success": True, 
