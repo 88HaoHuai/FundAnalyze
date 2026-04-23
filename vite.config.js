@@ -42,7 +42,7 @@ export default defineConfig({
               try {
                 const payload = JSON.parse(body);
                 console.log(`[AI Advice] Processing: ${payload.fund_name}`);
-                const scriptPath = path.resolve(__dirname, 'src/services/fetch_advice.py');
+                const scriptPath = path.resolve(__dirname, 'api/ai_advice.py');
                 const safeName = (payload.fund_name || '').replace(/"/g, '\\"').replace(/\n/g, ' ');
                 const cmd = `python3 "${scriptPath}" "${safeName}" "${payload.amount || 0}" "${payload.est_change || 0}" "${payload.drawdown || 0}" "${payload.rsi || 50}" "${payload.is_auto_invest || false}"`;
 
@@ -134,7 +134,7 @@ export default defineConfig({
               try {
                 const payload = JSON.parse(body);
                 console.log(`[Preview AI Advice] Processing: ${payload.fund_name}`);
-                const scriptPath = path.resolve(__dirname, 'src/services/fetch_advice.py');
+                const scriptPath = path.resolve(__dirname, 'api/ai_advice.py');
                 const safeName = (payload.fund_name || '').replace(/"/g, '\\"').replace(/\n/g, ' ');
                 const cmd = `python3 "${scriptPath}" "${safeName}" "${payload.amount || 0}" "${payload.est_change || 0}" "${payload.drawdown || 0}" "${payload.rsi || 50}" "${payload.is_auto_invest || false}"`;
 
