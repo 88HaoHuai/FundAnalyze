@@ -5,7 +5,7 @@ import os
 from http.server import BaseHTTPRequestHandler
 
 API_KEY = "sk-deoeqqlzkxpwclsbcibwgaljzmfxhhsncaebnswqyytzbghj"
-MODEL = "Qwen/Qwen2.5-7B-Instruct"
+MODEL = "deepseek-ai/DeepSeek-V3"
 
 def generate_advice(fund_name, amount, est_change, drawdown, rsi, is_auto_invest):
     try:
