@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import fs from 'fs';
 import path from 'path';
@@ -9,7 +9,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  return {
   plugins: [
     react(),
     {
@@ -46,7 +48,7 @@ export default defineConfig({
                 const safeName = (payload.fund_name || '').replace(/"/g, '\\"').replace(/\n/g, ' ');
                 const cmd = `python3 "${scriptPath}" "${safeName}" "${payload.amount || 0}" "${payload.est_change || 0}" "${payload.drawdown || 0}" "${payload.rsi || 50}" "${payload.is_auto_invest || false}"`;
 
-                exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+                exec(cmd, { env: { ...process.env, ...env }, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
                   res.setHeader('Content-Type', 'application/json; charset=utf-8');
                   if (error) {
                     console.error("[AI Advice] Error:", error);
@@ -84,7 +86,7 @@ export default defineConfig({
                 const safeSectors = fundSectors.replace(/"/g, '\\"').replace(/\n/g, ' ');
                 const cmd = `python3 "${scriptPath}" "${safeTitle}" "${safeContent}" "${safeSectors}"`;
 
-                exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+                exec(cmd, { env: { ...process.env, ...env }, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
                   res.setHeader('Content-Type', 'application/json; charset=utf-8');
                   if (error) {
                     console.error("[AI Analysis] Error:", error);
@@ -100,6 +102,23 @@ export default defineConfig({
                 res.statusCode = 500;
                 res.end(JSON.stringify({ success: false, error: 'Invalid Payload' }));
               }
+            });
+          } else if (req.url.startsWith('/api/auto_invest')) {
+            console.log(`[Auto Invest] Path: ${req.url}`);
+            const scriptPath = path.resolve(__dirname, 'api/auto_invest.py');
+            // 将整个 URL 传给 Python 脚本处理参数
+            const cmd = `python3 "${scriptPath}" "${req.url}"`;
+
+            exec(cmd, { env: { ...process.env, ...env }, maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              if (error) {
+                console.error("[Auto Invest] Error:", error);
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: error.message }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(stdout);
             });
           } else {
             next();
@@ -120,6 +139,21 @@ export default defineConfig({
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
               if (error) {
                 console.error("[Preview News Fetch] Error:", error);
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, error: error.message }));
+                return;
+              }
+              res.statusCode = 200;
+              res.end(stdout);
+            });
+          } else if (req.url.startsWith('/api/auto_invest')) {
+            console.log(`[Preview Auto Invest] Path: ${req.url}`);
+            const scriptPath = path.resolve(__dirname, 'api/auto_invest.py');
+            const cmd = `python3 "${scriptPath}" "${req.url}"`;
+
+            exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              if (error) {
                 res.statusCode = 500;
                 res.end(JSON.stringify({ success: false, error: error.message }));
                 return;
@@ -235,4 +269,6 @@ export default defineConfig({
       },
     }
   }
-})
+}
+});
+
