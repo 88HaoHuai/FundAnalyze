@@ -100,9 +100,9 @@ class handler(BaseHTTPRequestHandler):
                 "auto_invest_amount": "gt.0"
             })
 
-            from concurrent.futures import ThreadPoolExecutor, as_completed
+            logs_to_insert = []
 
-            def process_fund(record):
+            for record in funds_to_invest:
                 group_id = record.get("group_id")
                 fund_code = record.get("fund_code")
                 amount = record.get("amount") or 0
@@ -110,10 +110,12 @@ class handler(BaseHTTPRequestHandler):
                 last_date = record.get("last_auto_invest_date")
 
                 if last_date == today_str:
-                    return f"skipped (already settled): {fund_code}"
+                    results.append(f"skipped (already settled): {fund_code}")
+                    continue
                 
                 new_amount = round(amount + auto_amount, 2)
                 try:
+                    # 串行更新本金
                     sb_patch("group_funds", {
                         "group_id": f"eq.{group_id}",
                         "fund_code": f"eq.{fund_code}"
@@ -122,30 +124,26 @@ class handler(BaseHTTPRequestHandler):
                         "last_auto_invest_date": today_str
                     })
                     
-                    try:
-                        sb_post("auto_invest_logs", {
-                            "group_id": group_id,
-                            "fund_code": fund_code,
-                            "date": today_str,
-                            "amount_added": auto_amount,
-                            "total_amount": new_amount
-                        })
-                    except Exception as log_err:
-                        print(f"写入日志失败 (但不影响本金更新): {log_err}")
-                        
-                    return f"success: {fund_code} ({amount} -> {new_amount})"
+                    # 收集日志以备后续批量插入
+                    logs_to_insert.append({
+                        "group_id": group_id,
+                        "fund_code": fund_code,
+                        "date": today_str,
+                        "amount_added": auto_amount,
+                        "total_amount": new_amount
+                    })
+                    
+                    results.append(f"success: {fund_code} ({amount} -> {new_amount})")
                 except Exception as e:
                     print(f"更新 {fund_code} 失败: {e}")
-                    return f"error: {fund_code}"
+                    results.append(f"error: {fund_code}")
 
-            # 使用线程池加速，避免几十个持仓导致 Vercel 10s 强制超时
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(process_fund, r) for r in funds_to_invest]
-                for future in as_completed(futures):
-                    try:
-                        results.append(future.result())
-                    except Exception as e:
-                        results.append(f"error (future): {str(e)}")
+            # 批量写入日志
+            if logs_to_insert:
+                try:
+                    sb_post("auto_invest_logs", logs_to_insert)
+                except Exception as log_err:
+                    print(f"批量写入日志失败: {log_err}")
 
             self._send(200, {
                 "success": True, 
