@@ -5,9 +5,12 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.header import Header
-from datetime import date
+from datetime import datetime, timezone, timedelta
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def get_beijing_time():
+    return datetime.now(timezone.utc) + timedelta(hours=8)
 
 # ============================================================
 # 环境变量配置
@@ -64,7 +67,7 @@ def send_alert_email(to_email, fund_name, fund_code, current_change):
         f"  基金名称：{fund_name}\n"
         f"  基金代码：{fund_code}\n"
         f"  当前涨跌：{current_change}%\n"
-        f"  触发时间：{time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        f"  触发时间：{get_beijing_time().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         f"（同一基金每日最多提醒 2 次，请合理安排操作。）\n"
         f"——来自 FundAnalyze 自动监控系统"
     )
@@ -125,7 +128,7 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             results = []
-            today = date.today().isoformat()
+            today = get_beijing_time().date().isoformat()
 
             # 1. 查询所有开启提醒的用户配置
             configs = sb_get("user_alert_config", {"is_enabled": "eq.true", "select": "*"})
