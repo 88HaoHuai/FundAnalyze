@@ -28,14 +28,6 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, position, 
                                 透视
                             </button>
                         )}
-                        {onRemove && (
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); onRemove(); }} 
-                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px', padding: 0 }}
-                            >
-                                删除
-                            </button>
-                        )}
                     </div>
                 </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -133,14 +125,6 @@ export function FundCard({ fund, industryLabel, prevChange, analysis, position, 
                                 style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '13px', padding: 0 }}
                             >
                                 透视
-                            </button>
-                        )}
-                        {onRemove && (
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); onRemove(); }} 
-                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px', padding: 0 }}
-                            >
-                                删除
                             </button>
                         )}
                     </div>
