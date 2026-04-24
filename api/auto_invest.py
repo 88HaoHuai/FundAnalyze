@@ -36,7 +36,11 @@ def sb_request(method, table, params=None, body=None, timeout=10):
     if not res.ok:
         print(f"Supabase Error [{method} {table}]: {res.text}", file=sys.stderr)
     res.raise_for_status()
-    return res.json()
+    # PATCH/DELETE 可能返回空 body
+    try:
+        return res.json()
+    except Exception:
+        return None
 
 
 def fetch_fund_change(code):
@@ -49,7 +53,7 @@ def fetch_fund_change(code):
     try:
         res = requests.get(
             FUND_GZ_URL.format(code=code),
-            timeout=5,
+            timeout=3,
             headers={"User-Agent": "Mozilla/5.0"}
         )
         if res.ok:
@@ -71,7 +75,7 @@ def fetch_fund_change(code):
                 "Referer": "http://fund.eastmoney.com/",
                 "User-Agent": "Mozilla/5.0"
             },
-            timeout=5
+            timeout=3
         )
         if res.ok:
             data = res.json()
@@ -202,8 +206,8 @@ class handler(BaseHTTPRequestHandler):
                     print(f"处理 {code} 失败: {str(e)}", file=sys.stderr)
                     return f"fail:{code}({str(e)})", None
 
-            # 使用线程池并发处理
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            # 使用线程池并发处理（Vercel 限制执行时间，降低并发数）
+            with ThreadPoolExecutor(max_workers=5) as executor:
                 future_to_fund = {executor.submit(process_fund, f): f for f in funds}
                 for future in as_completed(future_to_fund):
                     res_str, log_entry = future.result()

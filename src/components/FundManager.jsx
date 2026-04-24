@@ -459,11 +459,11 @@ export function FundManager({ groups, funds, marketFundsData, onUpdate, onClose 
 
                 {/* 重新计算持仓总额 */}
                 <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px dashed #334155' }}>
-                  <button 
-                    onClick={handleRecalculate} 
-                    disabled={recalculating} 
+                  <button
+                    onClick={handleRecalculate}
+                    disabled={recalculating}
                     style={{
-                      width: '100%', padding: '8px', 
+                      width: '100%', padding: '8px',
                       background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)',
                       borderRadius: '8px', color: '#3b82f6', fontSize: '13px', fontWeight: '500',
                       cursor: recalculating ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
@@ -598,17 +598,17 @@ export function FundManager({ groups, funds, marketFundsData, onUpdate, onClose 
                   <Settings size={18} color="#94a3b8" />
                   <span style={{ fontSize: '14px', color: '#e2e8f0' }}>开启邮件提醒</span>
                 </div>
-                <div 
+                <div
                   onClick={() => setAlertConfig({ ...alertConfig, is_enabled: !alertConfig.is_enabled })}
                   style={{
-                    width: '44px', height: '22px', borderRadius: '11px', 
+                    width: '44px', height: '22px', borderRadius: '11px',
                     background: alertConfig.is_enabled ? '#4f46e5' : '#334155',
                     position: 'relative', cursor: 'pointer', transition: 'all 0.2s'
                   }}
                 >
                   <div style={{
                     width: '18px', height: '18px', background: 'white', borderRadius: '50%',
-                    position: 'absolute', top: '2px', 
+                    position: 'absolute', top: '2px',
                     left: alertConfig.is_enabled ? '24px' : '2px',
                     transition: 'all 0.2s'
                   }} />
@@ -618,22 +618,22 @@ export function FundManager({ groups, funds, marketFundsData, onUpdate, onClose 
               {/* 阈值设置 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <label style={{ fontSize: '13px', color: '#94a3b8' }}>触发阈值</label>
-                    <span style={{ fontSize: '14px', color: '#f8fafc', fontWeight: 'bold' }}>± {alertConfig.threshold}%</span>
+                  <label style={{ fontSize: '13px', color: '#94a3b8' }}>触发阈值</label>
+                  <span style={{ fontSize: '14px', color: '#f8fafc', fontWeight: 'bold' }}>± {alertConfig.threshold}%</span>
                 </div>
-                <input 
-                    type="range" min="0.5" max="10" step="0.1"
-                    value={alertConfig.threshold}
-                    onChange={e => setAlertConfig({ ...alertConfig, threshold: parseFloat(e.target.value) })}
-                    disabled={!alertConfig.is_enabled}
-                    style={{ width: '100%', cursor: 'pointer', accentColor: '#4f46e5' }}
+                <input
+                  type="range" min="0.5" max="10" step="0.1"
+                  value={alertConfig.threshold}
+                  onChange={e => setAlertConfig({ ...alertConfig, threshold: parseFloat(e.target.value) })}
+                  disabled={!alertConfig.is_enabled}
+                  style={{ width: '100%', cursor: 'pointer', accentColor: '#4f46e5' }}
                 />
               </div>
 
               {/* 邮箱设置 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <label style={{ fontSize: '13px', color: '#94a3b8' }}>接收邮箱（选填）</label>
-                <input 
+                <input
                   value={alertConfig.email_receiver}
                   onChange={e => setAlertConfig({ ...alertConfig, email_receiver: e.target.value })}
                   placeholder="留空则发送至您的注册邮箱"
@@ -653,7 +653,7 @@ export function FundManager({ groups, funds, marketFundsData, onUpdate, onClose 
                 </ul>
               </div>
 
-              <button 
+              <button
                 onClick={handleSaveAlerts}
                 disabled={saving}
                 style={{
