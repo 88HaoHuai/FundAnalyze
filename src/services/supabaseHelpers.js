@@ -22,7 +22,7 @@ export async function fetchGroups() {
   const groupIds = groups.map(g => g.id);
   const { data: gFunds, error } = await supabase
     .from('group_funds')
-    .select('group_id, fund_code, sort_order, amount, is_auto_invest, auto_invest_amount')
+    .select('group_id, fund_code, sort_order, amount, is_auto_invest, auto_invest_amount, last_auto_invest_date')
     .in('group_id', groupIds)
     .order('sort_order', { ascending: true });
     
@@ -40,7 +40,8 @@ export async function fetchGroups() {
       positions[f.fund_code] = {
         amount: f.amount || 0,
         isAutoInvest: f.is_auto_invest || false,
-        autoInvestAmount: f.auto_invest_amount || 0
+        autoInvestAmount: f.auto_invest_amount || 0,
+        lastAutoInvestDate: f.last_auto_invest_date || null
       };
     });
     return {
@@ -268,3 +269,59 @@ export async function fetchAutoInvestLogs(fundCode) {
   return data;
 }
 
+/**
+ * 批量更新持仓金额（基于当日涨跌预估重新计算）
+ * @param {Array<{groupId: string, fundCode: string, newAmount: number}>} updates
+ * @returns {number} 成功更新的条数
+ */
+export async function batchUpdatePositions(updates, todayStr = null) {
+  let successCount = 0;
+  for (const { groupId, fundCode, newAmount } of updates) {
+    const updateData = { amount: newAmount };
+    // 写入更新日期标记，用于防重复
+    if (todayStr) {
+      updateData.last_auto_invest_date = todayStr;
+    }
+    const { error } = await supabase
+      .from('group_funds')
+      .update(updateData)
+      .eq('group_id', groupId)
+      .eq('fund_code', fundCode);
+
+    if (error) {
+      console.error(`更新 ${fundCode} 持仓失败:`, error);
+    } else {
+      successCount++;
+    }
+  }
+  return successCount;
+}
+
+/**
+ * 批量插入持仓更新日志
+ * 复用 auto_invest_logs 表，记录每次持仓重算的明细
+ * 字段说明：old_amount=原金额, amount_added=收益, invest_amount=定投金额, total_amount=更新后金额
+ * created_at 显式传入北京时间，避免 Supabase 默认 UTC 导致时差
+ */
+export async function insertPositionUpdateLogs(logs) {
+  if (!logs || logs.length === 0) return;
+
+  const rows = logs.map(l => ({
+    group_id: l.groupId,
+    fund_code: l.fundCode,
+    date: l.date,
+    old_amount: l.oldAmount,
+    amount_added: l.profit,
+    invest_amount: l.investAmount,
+    total_amount: l.totalAmount,
+    created_at: l.createdAt
+  }));
+
+  const { error } = await supabase
+    .from('auto_invest_logs')
+    .insert(rows);
+
+  if (error) {
+    console.error('批量写入持仓更新日志失败:', error);
+  }
+}

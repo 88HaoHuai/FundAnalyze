@@ -3,8 +3,10 @@ import { X, Plus, Trash2, Edit2, Check, ChevronRight, Database, Layers, BarChart
 import {
   createGroup, deleteGroup, renameGroup,
   addMarketFund, removeMarketFund, renameMarketFund,
-  fetchAlertConfig, updateAlertConfig, removeFundFromGroup
+  fetchAlertConfig, updateAlertConfig, removeFundFromGroup,
+  batchUpdatePositions, insertPositionUpdateLogs
 } from '../services/supabaseHelpers';
+import { supabase } from '../services/supabaseClient';
 import { Mail, Bell, Settings } from 'lucide-react';
 
 // 通用小标签
@@ -76,7 +78,7 @@ function EditableRow({ label, onDelete, onRename }) {
   );
 }
 
-export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
+export function FundManager({ groups, funds, marketFundsData, onUpdate, onClose }) {
   const [activeSection, setActiveSection] = useState('groups'); // 'groups' | 'market'
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [newGroupName, setNewGroupName] = useState('');
@@ -84,7 +86,7 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
   const [newMarketName, setNewMarketName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [investing, setInvesting] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
   // 提醒配置状态
   const [alertConfig, setAlertConfig] = useState({
@@ -122,31 +124,114 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
 
   const { codes: marketCodes = [], shortNames: marketShortNames = {} } = marketFundsData || {};
 
-  // 手动执行定投结算
-  const handleManualInvest = async () => {
-    if (!window.confirm('确认手动执行今日的定投本金结算吗？(今日已结算过的基金将自动跳过)')) return;
-    setInvesting(true);
+  // 重新计算所有基金持仓总额（基于当日涨跌预估）
+  const handleRecalculate = async () => {
+    if (!window.confirm('确认基于当日实时涨跌预估，重新计算所有持仓基金的总金额吗？')) return;
+    setRecalculating(true);
     setError(null);
     try {
-      const res = await fetch('/api/auto_invest?manual=true', { method: 'POST' });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || '执行失败');
+      // 计算今日日期（北京时间）
+      const now = new Date();
+      const bjOffset = now.getTimezoneOffset() + 480; // 当前时区与北京时间的分钟差
+      const bjNow = new Date(now.getTime() + bjOffset * 60 * 1000);
+      const todayStr = bjNow.getFullYear() + '-' +
+        String(bjNow.getMonth() + 1).padStart(2, '0') + '-' +
+        String(bjNow.getDate()).padStart(2, '0');
+
+      // 查询 auto_invest_logs 表，获取今日已更新的基金代码
+      const { data: todayLogs } = await supabase
+        .from('auto_invest_logs')
+        .select('fund_code')
+        .eq('date', todayStr);
+      const updatedToday = new Set((todayLogs || []).map(l => l.fund_code));
+
+      // 收集所有普通分组中有持仓金额的基金
+      const updates = [];
+      const details = []; // 用于展示计算明细
+      const skipped = []; // 当日已更新的基金
+      const normalGroups = groups.filter(g => !g.isMarket);
+
+      for (const group of normalGroups) {
+        if (!group.positions) continue;
+        for (const code of group.codes) {
+          const pos = group.positions[code];
+          if (!pos || !pos.amount || pos.amount <= 0) continue;
+
+          // 防重复：今日已有更新记录的跳过
+          if (updatedToday.has(code)) {
+            const fundData = funds.find(f => f.code === code);
+            skipped.push(fundData?.name || code);
+            continue;
+          }
+
+          // 从 funds 实时数据中查找对应基金
+          const fundData = funds.find(f => f.code === code);
+          if (!fundData) continue;
+
+          // 优先使用盘中实时估算涨跌幅 (estChange)，其次用昨日涨幅 (prevDayChange)
+          let changePercent = null;
+          if (fundData.estChange != null && fundData.estChange !== '') {
+            changePercent = parseFloat(fundData.estChange);
+          } else if (fundData.prevDayChange != null && fundData.prevDayChange !== '') {
+            changePercent = parseFloat(fundData.prevDayChange);
+          }
+
+          if (changePercent == null || isNaN(changePercent)) continue;
+
+          const oldAmount = pos.amount;
+          // 定投金额：开启定投且有定投金额时才加
+          const investAmount = (pos.isAutoInvest && pos.autoInvestAmount > 0) ? pos.autoInvestAmount : 0;
+          // 收益 = 原金额 × 涨跌幅/100
+          const profit = parseFloat((oldAmount * changePercent / 100).toFixed(2));
+          const newAmount = parseFloat((oldAmount + profit + investAmount).toFixed(2));
+
+          updates.push({ groupId: group.id, fundCode: code, newAmount, oldAmount, profit, investAmount });
+          const investNote = investAmount > 0 ? ` +定投${investAmount}` : '';
+          details.push(`${fundData.name || code}: ${oldAmount} + (${profit >= 0 ? '+' : ''}${profit})${investNote} = ${newAmount}`);
+        }
       }
-      alert(`结算完成！成功处理了 ${json.processed || 0} 支基金。`);
+
+      if (updates.length === 0) {
+        const skipMsg = skipped.length > 0 ? `\n\n以下基金今日已更新过，已跳过：\n${skipped.join('、')}` : '';
+        alert('没有找到需要重新计算的持仓基金（需有持仓金额且有当日涨跌数据）。' + skipMsg);
+        return;
+      }
+
+      const successCount = await batchUpdatePositions(updates);
+
+      // 写入持仓更新日志（使用北京时间戳）
+      const bjTimeStr = todayStr + 'T' +
+        String(bjNow.getHours()).padStart(2, '0') + ':' +
+        String(bjNow.getMinutes()).padStart(2, '0') + ':' +
+        String(bjNow.getSeconds()).padStart(2, '0') + '+08:00';
+      const logEntries = updates.map(u => ({
+        groupId: u.groupId,
+        fundCode: u.fundCode,
+        oldAmount: u.oldAmount,
+        profit: u.profit,
+        investAmount: u.investAmount,
+        totalAmount: u.newAmount,
+        date: todayStr,
+        createdAt: bjTimeStr
+      }));
       try {
-          await onUpdate();
+        await insertPositionUpdateLogs(logEntries);
+      } catch (logErr) {
+        console.warn('写入持仓更新日志失败:', logErr);
+      }
+
+      const skipMsg = skipped.length > 0 ? `\n\n已跳过（今日已更新）：${skipped.join('、')}` : '';
+      alert(`重新计算完成！成功更新了 ${successCount}/${updates.length} 支基金的持仓总额。\n\n明细:\n${details.join('\n')}${skipMsg}`);
+
+      try {
+        await onUpdate();
       } catch (updateErr) {
-          console.warn('数据自动刷新失败，请手动刷新页面:', updateErr);
+        console.warn('数据自动刷新失败，请手动刷新页面:', updateErr);
       }
     } catch (e) {
-      if (e.message.includes('pattern')) {
-          setError('数据格式同步异常，请刷新页面重试');
-      } else {
-          setError('手动结算失败: ' + e.message);
-      }
+      setError('重新计算失败: ' + e.message);
     } finally {
-      setInvesting(false);
+      setRecalculating(false);
     }
   };
 
@@ -372,20 +457,20 @@ export function FundManager({ groups, marketFundsData, onUpdate, onClose }) {
                   </button>
                 </div>
 
-                {/* 手动触发定投 */}
+                {/* 重新计算持仓总额 */}
                 <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px dashed #334155' }}>
                   <button 
-                    onClick={handleManualInvest} 
-                    disabled={investing} 
+                    onClick={handleRecalculate} 
+                    disabled={recalculating} 
                     style={{
                       width: '100%', padding: '8px', 
-                      background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)',
-                      borderRadius: '8px', color: '#10b981', fontSize: '13px', fontWeight: '500',
-                      cursor: investing ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                      background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)',
+                      borderRadius: '8px', color: '#3b82f6', fontSize: '13px', fontWeight: '500',
+                      cursor: recalculating ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
                       display: 'flex', justifyContent: 'center', alignItems: 'center'
                     }}
                   >
-                    {investing ? '结算中...' : '▶ 手动结算今日定投'}
+                    {recalculating ? '计算中...' : '📊 重新计算持仓总额'}
                   </button>
                 </div>
               </div>

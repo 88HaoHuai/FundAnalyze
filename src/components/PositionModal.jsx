@@ -143,7 +143,7 @@ export function PositionModal({ fund, position, onSave, onClose }) {
                 <div style={{ marginTop: '30px', borderTop: '1px solid #334155', paddingTop: '20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#cbd5e1' }}>
                         <History size={16} />
-                        <h4 style={{ margin: 0, fontSize: '14px' }}>定投历史明细</h4>
+                        <h4 style={{ margin: 0, fontSize: '14px' }}>持仓更新记录</h4>
                     </div>
 
                     {logsLoading ? (
@@ -152,29 +152,66 @@ export function PositionModal({ fund, position, onSave, onClose }) {
                         </div>
                     ) : logs.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '13px', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
-                            暂无定投记录
+                            暂无更新记录
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {logs.map(log => (
-                                <div key={log.id} style={{ 
-                                    backgroundColor: '#0f172a', 
-                                    border: '1px solid #334155', 
-                                    padding: '12px', 
-                                    borderRadius: '8px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '6px'
-                                }}>
-                                    <div className="flex-between">
-                                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>{log.date}</span>
-                                        <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#22c55e' }}>+{log.amount_added} 元</span>
+                            {logs.map(log => {
+                                const oldAmt = log.old_amount;
+                                const profit = parseFloat(log.amount_added);
+                                const invest = log.invest_amount ? parseFloat(log.invest_amount) : 0;
+                                const totalAmt = log.total_amount;
+                                const profitColor = profit >= 0 ? '#22c55e' : '#ef4444';
+
+                                // 新格式：原金额 + (收益) + 定投 = 更新后金额
+                                const hasDetail = oldAmt != null && oldAmt !== 0;
+
+                                return (
+                                    <div key={log.id} style={{ 
+                                        backgroundColor: '#0f172a', 
+                                        border: '1px solid #334155', 
+                                        padding: '12px', 
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '6px'
+                                    }}>
+                                        {hasDetail ? (
+                                            <>
+                                                <div className="flex-between">
+                                                    <span style={{ fontSize: '13px', color: '#cbd5e1' }}>
+                                                        <span style={{ color: '#f8fafc' }}>{oldAmt}</span>
+                                                        <span style={{ color: '#64748b' }}> + </span>
+                                                        <span style={{ color: profitColor, fontWeight: '600' }}>({profit >= 0 ? '+' : ''}{profit})</span>
+                                                        {invest > 0 && (
+                                                            <>
+                                                                <span style={{ color: '#64748b' }}> + </span>
+                                                                <span style={{ color: '#f59e0b', fontWeight: '600' }}>定投{invest}</span>
+                                                            </>
+                                                        )}
+                                                        <span style={{ color: '#64748b' }}> = </span>
+                                                        <strong style={{ color: '#f8fafc' }}>{totalAmt}</strong>
+                                                    </span>
+                                                    <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', marginLeft: '8px' }}>{log.date}</span>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            /* 兼容旧格式日志 */
+                                            <>
+                                                <div className="flex-between">
+                                                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>{log.date}</span>
+                                                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: profitColor }}>
+                                                        {profit >= 0 ? '+' : ''}{profit} 元
+                                                    </span>
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
+                                                    更新后总额: <strong style={{ color: '#f8fafc' }}>{totalAmt}</strong>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
-                                    <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
-                                        结算后总本金: <strong style={{ color: '#f8fafc' }}>{log.total_amount}</strong>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>

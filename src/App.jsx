@@ -381,6 +381,7 @@ function App() {
       {showManager && (
         <FundManager
           groups={groups}
+          funds={funds}
           marketFundsData={marketFundsData}
           onUpdate={async () => {
             await loadAllData();
