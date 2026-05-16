@@ -73,11 +73,12 @@ class MarketCompassViewModel: ObservableObject {
         let fallbackName    = searchRes
 
         if let gz = gzRes {
+            // 昨日涨幅和净值日期必须以历史净值接口为准，避免盘中估值接口的 jzrq 滞后一天。
             return RealTimeFund(
                 code: gz.code,
                 name: fallbackName ?? gz.name,
-                nav: gz.nav ?? fallbackNav,
-                navDate: gz.navDate ?? fallbackDate,
+                nav: fallbackNav ?? gz.nav,
+                navDate: fallbackDate ?? gz.navDate,
                 estChange: gz.estChange,
                 estTime: gz.estTime,
                 valuation: gz.valuation,
@@ -96,14 +97,17 @@ class MarketCompassViewModel: ObservableObject {
     }
 
     private func fetchLSJZ(code: String) async -> (nav: String?, date: String?, change: String?)? {
-        guard let url = URL(string: APIClient.shared.baseURL + "/f10/lsjz?fundCode=\(code)&pageIndex=1&pageSize=1") else { return nil }
-        var req = URLRequest(url: url); req.timeoutInterval = 30
+        let cacheBuster = Int(Date().timeIntervalSince1970)
+        guard let url = URL(string: APIClient.shared.baseURL + "/fund/history?code=\(code)&pageSize=1&_t=\(cacheBuster)") else { return nil }
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
+        req.timeoutInterval = 30
+        req.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        req.setValue("no-cache", forHTTPHeaderField: "Pragma")
         do {
             let (data, _) = try await URLSession.shared.data(for: req)
             if let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let dataDict = dict["Data"] as? [String: Any],
-               let list = dataDict["LSJZList"] as? [[String: Any]],
-               let first = list.first {
+               let datas = dict["Datas"] as? [[String: Any]],
+               let first = datas.first {
                 let ch = first["JZZZL"] as? String
                 return (first["DWJZ"] as? String, first["FSRQ"] as? String, (ch == "" ? nil : ch))
             }
