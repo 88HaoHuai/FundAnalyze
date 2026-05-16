@@ -8,6 +8,10 @@ router = APIRouter(prefix="/api", tags=["funds_proxy"])
 
 # HTTP 客户端配置
 timeout = httpx.Timeout(10.0)
+no_cache_headers = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+}
 
 @router.get("/fund/{code}.js")
 async def get_fund_gz(code: str, rt: str = Query(None)):
@@ -55,9 +59,9 @@ async def get_f10_lsjz(fundCode: str, pageIndex: int = 1, pageSize: int = 20):
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             res = await client.get(url, params=params, headers=headers)
-            return Response(content=res.content, media_type="application/json")
+            return Response(content=res.content, media_type="application/json", headers=no_cache_headers)
         except Exception as e:
-            return Response(content=f'{{"error": "{str(e)}"}}', media_type="application/json", status_code=500)
+            return Response(content=f'{{"error": "{str(e)}"}}', media_type="application/json", status_code=500, headers=no_cache_headers)
 
 @router.get("/fund/history")
 async def get_fund_history_fast(code: str, pageIndex: int = 1, pageSize: int = 10):
@@ -72,12 +76,18 @@ async def get_fund_history_fast(code: str, pageIndex: int = 1, pageSize: int = 1
         "product": "EFund",
         "Version": "2.0.0",
     }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+        "Referer": "https://fund.eastmoney.com/",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
-            res = await client.get(url, params=params)
-            return Response(content=res.content, media_type="application/json")
+            res = await client.get(url, params=params, headers=headers)
+            return Response(content=res.content, media_type="application/json", headers=no_cache_headers)
         except Exception as e:
-            return Response(content=f'{{"error": "{str(e)}"}}', media_type="application/json", status_code=500)
+            return Response(content=f'{{"error": "{str(e)}"}}', media_type="application/json", status_code=500, headers=no_cache_headers)
 
 @router.get("/f10/FundArchivesDatas.aspx")
 async def get_fund_archives(type: str, code: str, topline: int = 10):
