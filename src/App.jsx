@@ -6,7 +6,6 @@ import { FundManager } from './components/FundManager';
 import { MarketCompass } from './components/MarketCompass';
 import { NewsBoard } from './components/NewsBoard';
 import { fundApi } from './services/fundApi';
-import { supabase } from './services/supabaseClient';
 import { fetchGroups, fetchMarketFunds, addFundToGroup, removeFundFromGroup, updateFundPosition } from './services/supabaseHelpers';
 import { AuthPage } from './pages/AuthPage';
 import { LogOut, Settings } from 'lucide-react';
@@ -32,16 +31,28 @@ function App() {
   const [aiDiagnostic, setAiDiagnostic] = useState(null);
   const [positionModalData, setPositionModalData] = useState(null);
 
-  // ─── 监听 Supabase Auth 状态 ──────────────────────────────
+  // ─── 监听后端 Auth 状态 ──────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAuthLoading(false);
+    import('./services/apiClient').then(({ apiClient }) => {
+        if (!apiClient.getToken()) {
+            setAuthLoading(false);
+            return;
+        }
+        apiClient.get('/api/auth/me')
+            .then(user => {
+                setSession({ user });
+            })
+            .catch(() => {
+                setSession(null);
+            })
+            .finally(() => {
+                setAuthLoading(false);
+            });
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-    return () => subscription.unsubscribe();
+
+    const onExpired = () => setSession(null);
+    window.addEventListener('auth-expired', onExpired);
+    return () => window.removeEventListener('auth-expired', onExpired);
   }, []);
 
   // ─── 加载数据（登录后触发）──────────────────────────────
@@ -103,7 +114,8 @@ function App() {
 
   // ─── 退出登录 ─────────────────────────────────────────────
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem('fund_token');
+    setSession(null);
   };
 
   // ─── 添加基金到当前分组 ────────────────────────────────────
