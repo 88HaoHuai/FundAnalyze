@@ -1,83 +1,152 @@
-# FundAnalyze - 实时基金追踪分析工具
+# FundAnalyze
 
-FundAnalyze 是一个基于 React + Vite 构建的现代化基金追踪 Web 应用，旨在帮助用户实时监控基金表现、分析历史趋势并高效管理自选基金组合。
+一个覆盖 **Web + iOS + FastAPI** 的基金分析项目，支持基金分组、实时估值、市场风向、资讯聚合和单基金 AI 分析。
 
-## ✨ 核心功能
+## 项目结构
 
-### 1. 🚀 实时数据追踪
-- **实时估值**：直观展示基金今日的实时估值涨跌幅 (Real-time Estimate)。
-- **实时排序**：基金列表自动按预估涨跌幅降序排列，关注重点一目了然。
-- **关键指标**：同时展示上一交易日官方涨跌幅 (Previous Day Change) 及最新净值 (NAV)。
+```text
+fundProject/
+├─ src/                         # Web 前端（React + Vite）
+├─ api/                         # Vercel Serverless 代理与定时任务入口
+├─ server/                      # FastAPI 后端（鉴权、分组、资讯、AI、调度）
+├─ ios/FundAnalyze/FundAnalyze/ # iOS 客户端（SwiftUI）
+├─ vercel.json                  # Vercel rewrites + cron
+└─ README.md
+```
 
-### 2. 🧠 智能辅助决策 (AI-Assisted Decision)
-- **趋势信号 (Trend)**：
-  - **均线系统**：集成 **MA20 (月线)** 和 **MA60 (季线)**，直观展示多空趋势。
-  - **多空判断**：自动识别“金叉”与“死叉”，给出明确的 📈 Bullish / 📉 Bearish 信号。
-- **波段操作 (Swing Trading)**：
-  - **支撑/压力位**：动态计算近 60 日最低/最高点，并在图表上以辅助线标注。
-  - **智能建议**：当净值接近支撑位 (< 2%) 时提示 **“低吸机会”**，接近压力位时提示 **“止盈风险”**。
-- **Contextual Drawdown**：距52周高点回撤超过 15% 时高亮提示“黄金坑”。
-- **市场情绪**：实时 RSI 和波动率标签。
+## 当前核心能力
 
-### 3. 📊 交互式趋势与持仓 (Perspective View)
-- **趋势图表**：支持查看 **近7天 (7D)**、1个月等历史收益率走势。
-- **深度持仓透视**：查看前十大重仓股，并实时拉取 **个股涨跌幅**（沪深北交易所全覆盖），助您快速归因基金涨跌。
+- 基金分组与持仓管理（普通分组 + 市场分组）
+- 基金实时估值与历史趋势
+- 资讯页四分区（市场摘要 / 重点资讯 / 相关资讯 / AI 解读）
+- 单基金分析页（关键词、相关资讯、政策观察、AI 综合分析）
+- 趋势图多周期切换：`近7天 / 近1月 / 近3月 / 近6月 / 近1年 / 近3年`
+- 趋势图回撤标注：最大回撤与修复时间
+- Vercel 代理接口（`/api/fund`、`/api/pingzhong`、`/api/f10`、`/api/stock`）
+- 自动定投调度任务（FastAPI APScheduler + Vercel Cron）
 
-### 4. 🧭 市场风向标 (Market Compass)
-- **全景覆盖**：已集成 **30+** 个核心赛道，包含：
-  - **📈 宽基指数**：沪深300、中证500/1000、上证50、科创50。
-  - **🌍 全球市场**：纳斯达克100、标普500、恒生指数、中概互联。
-  - **🔥 热门赛道**：人工智能(AI)、算力、光伏、新能源、半导体、机器人、创新药、智能汽车。
-  - **🛡️ 周期/防守**：红利低波、银行、煤炭、军工、黄金、基建、地产、消费、白酒等。
-- **四象限分析**：基于“趋势强度”与“估值水位”双重维度自动落点。
-- **策略指导**：
-  - **↗️ 高景气 (High Boom)**：右侧追涨，适合趋势定投。
-  - **↘️ 底部反转 (Golden Pit)**：左侧布局，捕捉反转机会。
-  - **↙️ 弱势整理 (Weak)**：避免盲目抄底。
-  - **↖️ 顶部风险 (Risk)**：提示止盈/减仓。
+## 技术栈
 
-### 5. 🏷️ 基金属性标记
-- 自动识别并标记 **场内 (Exchange)** 与 **场外 (OTC)** 基金，方便交易渠道区分。
+- Web：React 19 + Vite 7 + Recharts
+- iOS：SwiftUI
+- 后端：FastAPI + SQLAlchemy Async + asyncpg + APScheduler
+- 数据库：PostgreSQL（`DATABASE_URL`）
+- 部署：Vercel（前端与代理）+ 自托管 FastAPI（或云主机）
 
+## 本地开发
 
-### 6. 📁 分组管理系统
-- **多分组支持**：内置支持按渠道（如"支付宝"、"京东"）或其他自定义逻辑进行分组显示。
-- **便捷配置**：支持通过 JSON 配置文件直接管理分组结构。
-- **本地持久化**：所有分组配置修改实时保存至浏览器 **LocalStorage**，刷新页面不丢失，无需依赖后端数据库。
+### 1. 启动后端（FastAPI）
 
-### 7. 🎨 现代化 UI/UX
-- **暗黑模式**：默认采用极简暗黑风格，护眼且专业。
-- **紧凑布局**：优化的单行卡片设计，在有限屏幕空间内展示更多高价值信息。
-- **高性能**：采用请求节流 (Throttling) 技术优化 API 调用，确保大量基金数据加载流畅。
+在 `server` 目录准备环境：
 
-## 🛠️ 技术栈
+```bash
+cd server
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-- **前端框架**: [React 18](https://react.dev/)
-- **构建工具**: [Vite](https://vitejs.dev/)
-- **图表库**: [Recharts](https://recharts.org/)
-- **图标库**: [Lucide React](https://lucide.dev/)
-- **数据源**: 天天基金网 (Eastmoney) API (通过 Vite Proxy 代理)
+创建 `.env`（示例）：
 
-## 📦 安装与运行
+```env
+DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/fundanalyze
+JWT_SECRET=replace_me
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_HOURS=720
 
-1. **克隆仓库**
-   ```bash
-   git clone https://github.com/88HaoHuai/FundAnalyze.git
-   cd FundAnalyze
-   ```
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=
 
-2. **安装依赖**
-   ```bash
-   npm install
-   ```
+AI_API_KEY=
+AI_MODEL=deepseek-ai/DeepSeek-V3
+CRON_SECRET=
+```
 
-3. **启动开发服务器**
-   ```bash
-   npm run dev
-   ```
-   访问终端显示的本地地址 (通常是 `http://localhost:5173`) 即可使用。
+启动：
 
-## 📝 配置说明
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
 
-- 默认基金配置位于 `src/config/funds.json`。
-- 修改前端分组管理器的设置会自动保存在本地浏览器中。如需恢复默认配置，请清除浏览器 LocalStorage 中的 `fundTrackerGroups` 字段。
+### 2. 启动 Web 前端（React）
+
+在仓库根目录：
+
+```bash
+npm install
+npm run dev
+```
+
+Vite 已配置代理：`/api -> http://127.0.0.1:8000`。
+
+### 3. 启动 iOS 客户端
+
+```bash
+open ios/FundAnalyze/FundAnalyze/FundAnalyze.xcodeproj
+```
+
+在 Xcode 里选择 `FundAnalyze` Scheme 后运行模拟器即可。
+
+## 数据与接口说明
+
+### FastAPI 业务接口（`server/routers`）
+
+- `auth.py`：登录、鉴权
+- `groups.py`：分组与持仓管理
+- `funds.py`：基金元数据、基金相关能力
+- `news.py`：资讯聚合（东方财富 / 财联社）
+- `ai.py`：AI 分析能力
+
+### Vercel 代理接口（`api/` + `vercel.json`）
+
+- `/api/fund/*` -> 天天基金估值 JS
+- `/api/pingzhong/*` -> `pingzhong` 代理
+- `/api/f10/*` -> 东方财富 F10 代理
+- `/api/stock` -> 股票行情代理
+
+## 数据库变更
+
+近期新增基金关键词相关字段：
+
+- `group_funds.fund_type`
+- `group_funds.fund_keywords`
+
+如果线上库缺字段，可执行：
+
+```sql
+ALTER TABLE group_funds ADD COLUMN fund_type VARCHAR(50);
+ALTER TABLE group_funds ADD COLUMN fund_keywords VARCHAR(500);
+```
+
+## 部署要点
+
+### Web + 代理（Vercel）
+
+- `vercel.json` 已配置 rewrites 与 cron
+- `api/auto_invest` 受 `CRON_SECRET` 保护
+- 部署后需在 Vercel 项目配置环境变量
+
+### FastAPI
+
+- 需要独立部署并保证 `DATABASE_URL` 可连接
+- 建议通过 `systemd` / `supervisor` / Docker 方式守护
+- 生产环境请限制 CORS，不要使用 `allow_origins=["*"]`
+
+## 安全注意事项
+
+- 当前代码里包含默认管理员初始化逻辑（`server/main.py`），上线前请改为你自己的安全账号与强密码，并尽快迁移到环境变量方案
+- `.env` 不要提交到仓库
+- JWT Secret、SMTP 密码、AI Key 必须使用线上密钥管理
+
+## 常见问题
+
+- Web 报 `Unexpected token 'T'`：通常是上游返回了 HTML，当前已在代理和前端做降级解析，优先检查上游接口可用性
+- 趋势图长周期无数据：优先检查 `pingzhong` 与 `f10` 代理是否可访问
+- 资讯为空：先确认后端 `/api/news` 与 `/api/news_cls` 在当前网络可返回数据
+
+## 许可证
+
+当前仓库未声明开源许可证。如需开源，请补充 `LICENSE` 文件。
