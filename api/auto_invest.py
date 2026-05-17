@@ -18,6 +18,12 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 # 东方财富 API 地址
 FUND_GZ_URL = "http://fundgz.1234567.com.cn/js/{code}.js"
 FUND_LSJZ_URL = "http://api.fund.eastmoney.com/f10/lsjz"
+FUND_MOBILE_HISTORY_URL = "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNHisNetList"
+FOREIGN_FUND_KEYWORDS = (
+    "qdii", "fof", "纳斯达克", "标普", "道琼斯", "越南", "印度", "日本", "德国",
+    "海外", "全球", "美国", "美股", "港股", "恒生", "香港", "中概", "亚洲",
+    "美元", "人民币", "互联", "科技市值"
+)
 
 def get_bj_now():
     return datetime.now(timezone.utc) + timedelta(hours=8)
@@ -43,34 +49,75 @@ def sb_request(method, table, params=None, body=None, timeout=10):
         return None
 
 
-def fetch_fund_change(code):
+def is_foreign_related_fund(code, fund_name=None, fund_type=None):
+    if fund_type == "007":
+        return True
+    text = f"{code} {fund_name or ''}".lower()
+    return any(keyword.lower() in text for keyword in FOREIGN_FUND_KEYWORDS)
+
+
+def pick_change_from_history(items, target_date, allow_previous_date):
+    for item in items:
+        if item.get("FSRQ") == target_date:
+            jzzzl = item.get("JZZZL")
+            if jzzzl is not None and jzzzl != "":
+                return float(jzzzl), target_date
+
+    if not allow_previous_date:
+        return None, None
+
+    target = datetime.fromisoformat(target_date).date()
+    for item in items:
+        nav_date_str = item.get("FSRQ")
+        jzzzl = item.get("JZZZL")
+        if not nav_date_str or jzzzl is None or jzzzl == "":
+            continue
+        try:
+            nav_date = datetime.fromisoformat(nav_date_str).date()
+        except ValueError:
+            continue
+        if nav_date <= target and (target - nav_date).days <= 7:
+            return float(jzzzl), nav_date_str
+
+    return None, None
+
+
+def fetch_fund_change(code, target_date, fund_name=None):
     """
-    获取基金当日涨跌幅（%）
-    优先使用盘中实时估值（gszzl），若无则用历史净值（JZZZL）
-    返回 float 或 None
+    获取用于结算的实际涨跌幅（%）。
+    国内基金必须匹配 target_date；海外/QDII 基金若目标日尚未更新，允许使用最近一个更早净值日。
     """
-    # 1. 尝试实时估值接口
     try:
         res = requests.get(
-            FUND_GZ_URL.format(code=code),
+            FUND_MOBILE_HISTORY_URL,
+            params={
+                "FCODE": code,
+                "PageIndex": 1,
+                "PageSize": 5,
+                "deviceid": "Wap",
+                "plat": "Wap",
+                "product": "EFund",
+                "Version": "2.0.0",
+            },
             timeout=3,
-            headers={"User-Agent": "Mozilla/5.0"}
+            headers={"User-Agent": "Mozilla/5.0", "Referer": "http://fund.eastmoney.com/"}
         )
         if res.ok:
-            match = re.search(r'jsonpgz\((.*)\);', res.text)
-            if match:
-                data = json.loads(match.group(1))
-                gszzl = data.get("gszzl")
-                if gszzl is not None and gszzl != "":
-                    return float(gszzl)
+            data = res.json()
+            result = pick_change_from_history(
+                data.get("Datas", []) or [],
+                target_date,
+                allow_previous_date=is_foreign_related_fund(code, fund_name),
+            )
+            if result[0] is not None:
+                return result
     except Exception as e:
-        print(f"[fetch_change] 实时估值失败 {code}: {e}", file=sys.stderr)
+        print(f"[fetch_change] 移动端历史净值失败 {code}: {e}", file=sys.stderr)
 
-    # 2. 回退到历史净值接口（QDII 等无盘中估值的基金）
     try:
         res = requests.get(
             FUND_LSJZ_URL,
-            params={"fundCode": code, "pageIndex": 1, "pageSize": 1},
+            params={"fundCode": code, "pageIndex": 1, "pageSize": 5},
             headers={
                 "Referer": "http://fund.eastmoney.com/",
                 "User-Agent": "Mozilla/5.0"
@@ -79,15 +126,18 @@ def fetch_fund_change(code):
         )
         if res.ok:
             data = res.json()
-            lsjz_list = data.get("Data", {}).get("LSJZList", [])
-            if lsjz_list:
-                jzzzl = lsjz_list[0].get("JZZZL")
-                if jzzzl is not None and jzzzl != "":
-                    return float(jzzzl)
+            data_dict = data.get("Data", {}) or {}
+            result = pick_change_from_history(
+                data_dict.get("LSJZList", []) or [],
+                target_date,
+                allow_previous_date=is_foreign_related_fund(code, fund_name, data_dict.get("FundType")),
+            )
+            if result[0] is not None:
+                return result
     except Exception as e:
         print(f"[fetch_change] 历史净值失败 {code}: {e}", file=sys.stderr)
 
-    return None
+    return None, None
 
 
 # ============================================================
@@ -123,12 +173,13 @@ class handler(BaseHTTPRequestHandler):
                 return
 
         bj_now = get_bj_now()
-        # 周末不执行自动结算，但手动可以执行
-        if not is_manual and bj_now.weekday() >= 5:
-            self._send(200, {"success": True, "message": "周末不执行自动结算"})
+        target_date = (bj_now - timedelta(days=1)).date()
+        target_date_str = target_date.isoformat()
+        # 结算上一交易日；目标日期为周末时跳过，但手动可以执行用于补偿。
+        if not is_manual and target_date.weekday() >= 5:
+            self._send(200, {"success": True, "message": f"{target_date_str} 为周末，不执行自动结算"})
             return
 
-        today_str = bj_now.strftime('%Y-%m-%d')
         results = []
         logs_to_insert = []
 
@@ -145,7 +196,7 @@ class handler(BaseHTTPRequestHandler):
             
             funds = sb_request("GET", "group_funds", params={
                 "amount": "gt.0",
-                "select": "group_id,fund_code,amount,is_auto_invest,auto_invest_amount,last_auto_invest_date"
+                "select": "group_id,fund_code,fund_name,amount,is_auto_invest,auto_invest_amount,last_auto_invest_date"
             })
             
             print(f"[DEBUG] 找到 {len(funds)} 支持仓基金", file=sys.stderr)
@@ -154,19 +205,20 @@ class handler(BaseHTTPRequestHandler):
             def process_fund(f):
                 gid = f.get("group_id")
                 code = f.get("fund_code")
+                fund_name = f.get("fund_name")
                 old_amt = f.get("amount", 0) or 0
                 is_auto = f.get("is_auto_invest", False)
                 auto_amt = f.get("auto_invest_amount", 0) or 0
                 
-                # 防重复：今天已结算过的跳过
-                if str(f.get("last_auto_invest_date")) == today_str:
+                # 防重复：目标净值日期已结算过的跳过
+                if str(f.get("last_auto_invest_date")) == target_date_str:
                     return f"skipped:{code}", None
 
                 try:
-                    # 获取当日涨跌幅
-                    change_pct = fetch_fund_change(code)
+                    # 国内基金只用目标净值日期；海外/QDII 允许使用最近一个更早净值日。
+                    change_pct, nav_date = fetch_fund_change(code, target_date_str, fund_name)
                     if change_pct is None:
-                        return f"no_data:{code}", None
+                        return f"no_data:{code}({target_date_str})", None
 
                     # 计算收益
                     profit = round(old_amt * change_pct / 100, 2)
@@ -179,7 +231,7 @@ class handler(BaseHTTPRequestHandler):
                     sb_request("PATCH", "group_funds", params={
                         "group_id": f"eq.{gid}", "fund_code": f"eq.{code}"
                     }, body={
-                        "amount": new_amt, "last_auto_invest_date": today_str
+                        "amount": new_amt, "last_auto_invest_date": target_date_str
                     }, timeout=5)
                     
                     # 构建日志（显式使用北京时间）
@@ -187,7 +239,7 @@ class handler(BaseHTTPRequestHandler):
                     log = {
                         "group_id": gid,
                         "fund_code": code,
-                        "date": today_str,
+                        "date": nav_date or target_date_str,
                         "old_amount": old_amt,
                         "amount_added": profit,
                         "invest_amount": invest_amt,
@@ -230,7 +282,7 @@ class handler(BaseHTTPRequestHandler):
 
             self._send(200, {
                 "success": True,
-                "date": today_str,
+                "date": target_date_str,
                 "processed": ok_count,
                 "skipped": skip_count,
                 "no_data": nodata_count,

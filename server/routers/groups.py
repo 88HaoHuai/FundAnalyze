@@ -14,6 +14,7 @@ from models.group_fund import GroupFund
 from models.market_fund import MarketFund
 from routers.auth import get_current_user
 import schemas
+from services.fund_metadata_service import fetch_fund_metadata
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
@@ -29,6 +30,7 @@ async def get_groups(current_user: User = Depends(get_current_user), db: AsyncSe
     m_stmt = select(MarketFund).order_by(MarketFund.sort_order)
     m_result = await db.execute(m_stmt)
     market_funds = m_result.scalars().all()
+    dirty = False
     
     response_list = []
     for g in groups:
@@ -44,18 +46,30 @@ async def get_groups(current_user: User = Depends(get_current_user), db: AsyncSe
                     "isAutoInvest": False,
                     "autoInvestAmount": 0.0,
                     "lastAutoInvestDate": None,
-                    "fund_name": m.fund_name # 注入易读名称
+                    "fund_name": m.fund_name, # 注入易读名称
+                    "keywords": []
                 }
         else:
             # 普通用户持仓分组
             codes = [f.fund_code for f in g.funds]
             for f in g.funds:
+                if (not f.fund_name) or (not f.fund_keywords):
+                    try:
+                        metadata = await fetch_fund_metadata(f.fund_code)
+                    except Exception:
+                        metadata = None
+                    if metadata:
+                        f.fund_name = metadata["fund_name"]
+                        f.fund_type = metadata.get("fund_type")
+                        f.fund_keywords = ",".join(metadata.get("keywords") or [])
+                        dirty = True
                 positions[f.fund_code] = {
                     "amount": float(f.amount),
                     "isAutoInvest": f.is_auto_invest,
                     "autoInvestAmount": float(f.auto_invest_amount),
                     "lastAutoInvestDate": f.last_auto_invest_date.isoformat() if f.last_auto_invest_date else None,
-                    "fund_name": f.fund_name
+                    "fund_name": f.fund_name,
+                    "keywords": [item for item in (f.fund_keywords or "").split(",") if item]
                 }
         
         g_dict = {
@@ -69,6 +83,9 @@ async def get_groups(current_user: User = Depends(get_current_user), db: AsyncSe
             "positions": positions
         }
         response_list.append(g_dict)
+
+    if dirty:
+        await db.flush()
     
     return response_list
 
@@ -129,7 +146,17 @@ async def add_fund_to_group(group_id: int, fund_data: schemas.GroupFundCreate, c
     if not (await db.execute(stmt)).scalar_one_or_none():
         raise HTTPException(status_code=404, detail="分组不存在")
         
-    new_fund = GroupFund(group_id=group_id, **fund_data.model_dump())
+    try:
+        metadata = await fetch_fund_metadata(fund_data.fund_code)
+    except Exception:
+        metadata = None
+    new_fund = GroupFund(
+        group_id=group_id,
+        **fund_data.model_dump(),
+        fund_name=(metadata or {}).get("fund_name"),
+        fund_type=(metadata or {}).get("fund_type"),
+        fund_keywords=",".join((metadata or {}).get("keywords") or [])
+    )
     db.add(new_fund)
     try:
         await db.commit()

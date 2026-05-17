@@ -54,8 +54,8 @@ struct HomeView: View {
                 
                 // 顶部总览
                 TotalOverviewCard(
-                    totalAmount: vm.totalAmount,
-                    totalEstProfit: vm.totalEstProfit,
+                    totalAmount: selectedTotalAmount,
+                    totalEstProfit: selectedTotalEstProfit,
                     isAmountHidden: $isAmountHidden
                 )
                     .padding(.horizontal, 16)
@@ -129,35 +129,29 @@ struct HomeView: View {
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 0) {
-                                if selectedGroupId == nil {
-                                    // “全部”标签下：收集所有基金代码并去重
-                                    let allCodes = Array(Set(vm.groups.flatMap { $0.codes }))
-                                    let sortedCodes = sortCodes(allCodes)
-                                    
-                                    ForEach(sortedCodes, id: \.self) { code in
-                                        // 同一基金在不同组的持仓是一样的，取第一个找到的即可
-                                        let position = vm.groups.compactMap { $0.positions[code] }.first
-                                        FundCardView(
-                                            code: code,
-                                            position: position,
-                                            realTimeData: vm.realTimeData[code]
-                                        )
-                                        Divider().padding(.horizontal, 16)
-                                    }
-                                } else {
-                                    // 单个分组标签下：按组内代码渲染
-                                    if let group = vm.groups.first(where: { $0.id == selectedGroupId }) {
-                                        let sortedCodes = sortCodes(group.codes)
-                                        
-                                        ForEach(sortedCodes, id: \.self) { code in
-                                            FundCardView(
-                                                code: code,
-                                                position: group.positions[code],
+                                let sortedCodes = sortCodes(visibleCodes)
+                                
+                                ForEach(sortedCodes, id: \.self) { code in
+                                    NavigationLink(
+                                        destination: FundAnalysisView(
+                                            context: FundAnalysisContext(
+                                                fundCode: code,
+                                                fundName: positionForCode(code)?.fund_name ?? vm.realTimeData[code]?.name ?? "基金 \(code)",
+                                                position: positionForCode(code),
                                                 realTimeData: vm.realTimeData[code]
                                             )
-                                            Divider().padding(.horizontal, 16)
-                                        }
+                                        )
+                                    ) {
+                                        FundCardView(
+                                            code: code,
+                                            position: positionForCode(code),
+                                            realTimeData: vm.realTimeData[code],
+                                            isAmountHidden: isAmountHidden
+                                        )
+                                        .id("\(code)-\(isAmountHidden)")
                                     }
+                                    .buttonStyle(.plain)
+                                    Divider().padding(.horizontal, 16)
                                 }
                             }
                             .padding(.bottom, 20)
@@ -186,6 +180,58 @@ struct HomeView: View {
         case .asc: return "arrow.up"
         case .defaultOrder: return "arrow.up.arrow.down"
         }
+    }
+    
+    private var selectedPositions: [FundPosition] {
+        if let selectedGroupId,
+           let group = vm.groups.first(where: { $0.id == selectedGroupId }) {
+            return group.codes.compactMap { group.positions[$0] }
+        }
+        
+        let uniqueCodes = Set(vm.groups.flatMap { $0.codes })
+        return uniqueCodes.compactMap { code in
+            vm.groups.compactMap { $0.positions[code] }.first
+        }
+    }
+    
+    private var selectedTotalAmount: Double {
+        selectedPositions.reduce(0) { $0 + $1.amount }
+    }
+    
+    private var selectedTotalEstProfit: Double {
+        if let selectedGroupId,
+           let group = vm.groups.first(where: { $0.id == selectedGroupId }) {
+            return group.codes.reduce(0) { total, code in
+                let amount = group.positions[code]?.amount ?? 0
+                let change = vm.realTimeData[code]?.estChangeDouble ?? 0
+                return total + amount * (change / 100.0)
+            }
+        }
+        
+        let uniqueCodes = Set(vm.groups.flatMap { $0.codes })
+        return uniqueCodes.reduce(0) { total, code in
+            let amount = vm.groups.compactMap { $0.positions[code] }.first?.amount ?? 0
+            let change = vm.realTimeData[code]?.estChangeDouble ?? 0
+            return total + amount * (change / 100.0)
+        }
+    }
+    
+    private var visibleCodes: [String] {
+        if let selectedGroupId,
+           let group = vm.groups.first(where: { $0.id == selectedGroupId }) {
+            return group.codes
+        }
+        
+        return Array(Set(vm.groups.flatMap { $0.codes }))
+    }
+    
+    private func positionForCode(_ code: String) -> FundPosition? {
+        if let selectedGroupId,
+           let group = vm.groups.first(where: { $0.id == selectedGroupId }) {
+            return group.positions[code]
+        }
+        
+        return vm.groups.compactMap { $0.positions[code] }.first
     }
     
     // 执行排序逻辑
@@ -280,18 +326,7 @@ struct TotalOverviewCard: View {
                 
                 Spacer()
                 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("累计收益")
-                        .font(.system(size: 11))
-                        .foregroundColor(.gray)
-                    Text("0.00") // 暂无后端字段
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.gray)
-                }
-                
-                Spacer()
-                
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .trailing, spacing: 2) {
                     Text("收益率")
                         .font(.system(size: 11))
                         .foregroundColor(.gray)

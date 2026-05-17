@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from datetime import timezone, timedelta
 import secrets
 import asyncio
+from pathlib import Path
 
 # 北京时区 UTC+8
 CST = timezone(timedelta(hours=8))
@@ -57,6 +58,8 @@ class AdminUserAdmin(ModelView, model=AdminUser):
     name = "管理员"
     name_plural = "管理员列表"
     icon = "fa-solid fa-user-shield"
+    category = "用户管理"
+    category_icon = "fa-solid fa-users-gear"
     column_list = [AdminUser.id, AdminUser.username, AdminUser.is_active, AdminUser.created_at]
     column_labels = {
         "id": "ID",
@@ -69,6 +72,8 @@ class UserAdmin(ModelView, model=User):
     name = "用户"
     name_plural = "用户列表"
     icon = "fa-solid fa-users"
+    category = "用户管理"
+    category_icon = "fa-solid fa-users-gear"
     column_list = [User.id, User.email, User.created_at]
     column_labels = {
         "id": "ID",
@@ -80,6 +85,8 @@ class FundGroupAdmin(ModelView, model=FundGroup):
     name = "基金分组"
     name_plural = "基金分组管理"
     icon = "fa-solid fa-layer-group"
+    category = "基金管理"
+    category_icon = "fa-solid fa-chart-line"
     column_list = [FundGroup.id, FundGroup.user_id, FundGroup.name, FundGroup.is_market, FundGroup.sort_order]
     column_labels = {
         "id": "ID",
@@ -93,6 +100,8 @@ class GroupFundAdmin(ModelView, model=GroupFund):
     name = "基金持仓"
     name_plural = "持仓数据管理"
     icon = "fa-solid fa-chart-pie"
+    category = "基金管理"
+    category_icon = "fa-solid fa-chart-line"
     column_list = [GroupFund.id, GroupFund.group_id, GroupFund.fund_name, GroupFund.fund_code, GroupFund.amount, GroupFund.is_auto_invest]
     column_labels = {
         "id": "ID",
@@ -107,6 +116,8 @@ class UserAlertConfigAdmin(ModelView, model=UserAlertConfig):
     name = "预警配置"
     name_plural = "预警提醒配置"
     icon = "fa-solid fa-bell"
+    category = "预警管理"
+    category_icon = "fa-solid fa-triangle-exclamation"
     column_list = [UserAlertConfig.id, UserAlertConfig.user_id, UserAlertConfig.is_enabled, UserAlertConfig.threshold]
     column_labels = {
         "id": "ID",
@@ -119,6 +130,8 @@ class AlertHistoryAdmin(ModelView, model=AlertHistory):
     name = "预警日志"
     name_plural = "预警发送历史"
     icon = "fa-solid fa-history"
+    category = "预警管理"
+    category_icon = "fa-solid fa-triangle-exclamation"
     column_list = [AlertHistory.id, AlertHistory.user_id, AlertHistory.fund_code, AlertHistory.change_val, AlertHistory.sent_at]
     column_labels = {
         "id": "ID",
@@ -132,7 +145,8 @@ class AutoInvestLogAdmin(ModelView, model=AutoInvestLog):
     name = "定投结算日志"
     name_plural = "定投结算记录"
     icon = "fa-solid fa-calendar-check"
-    category = "任务日志"
+    category = "任务管理"
+    category_icon = "fa-solid fa-list-check"
     column_list = [AutoInvestLog.id, AutoInvestLog.group_id, AutoInvestLog.fund_code, AutoInvestLog.date, AutoInvestLog.total_amount]
     column_labels = {
         "id": "ID",
@@ -146,7 +160,8 @@ class CronLogAdmin(ModelView, model=CronLog):
     name = "任务执行日志"
     name_plural = "定时任务执行日志"
     icon = "fa-solid fa-microchip"
-    category = "任务日志"
+    category = "任务管理"
+    category_icon = "fa-solid fa-list-check"
     # 列表视图
     column_list = [CronLog.id, CronLog.task_name, CronLog.status, CronLog.message, CronLog.executed_at]
     # 详情页视图（包含 details JSON 明细）
@@ -177,7 +192,8 @@ class MarketFundAdmin(ModelView, model=MarketFund):
     name = "市场风向标"
     name_plural = "市场风向标管理"
     icon = "fa-solid fa-compass"
-    category = "市场配置"
+    category = "基金管理"
+    category_icon = "fa-solid fa-chart-line"
     column_list = [MarketFund.id, MarketFund.fund_code, MarketFund.fund_name, MarketFund.category, MarketFund.sort_order]
     column_labels = {
         "id": "ID",
@@ -193,7 +209,8 @@ class ScheduledTaskAdmin(ModelView, model=ScheduledTask):
     name = "定时任务"
     name_plural = "定时任务配置"
     icon = "fa-solid fa-clock"
-    category = "任务日志"
+    category = "任务管理"
+    category_icon = "fa-solid fa-list-check"
     column_list = [ScheduledTask.id, ScheduledTask.name, ScheduledTask.cron_expression, ScheduledTask.is_enabled, ScheduledTask.last_run_at, ScheduledTask.last_run_status]
     column_labels = {
         "id": "ID",
@@ -216,10 +233,10 @@ class ScheduledTaskAdmin(ModelView, model=ScheduledTask):
 
     @action(
         name="manual_trigger",
-        label="⚡ 手动触发",
+        label="手动触发",
         confirmation_message="确认手动执行此任务？执行结果请在「定时任务执行日志」中查看。",
-        add_in_detail=True,
-        add_in_list=True,
+        add_in_detail=False,
+        add_in_list=False,
     )
     async def manual_trigger_action(self, request: Request):
         # 延迟导入，避免循环引用
@@ -255,7 +272,8 @@ class ScheduledTaskAdmin(ModelView, model=ScheduledTask):
 def setup_admin(app: FastAPI, engine):
     # 使用随机字符串作为 secret_key (在生产环境中应该使用环境变量配置)
     authentication_backend = AdminAuth(secret_key=secrets.token_hex(16))
-    admin = Admin(app=app, engine=engine, authentication_backend=authentication_backend, title="FundAnalyze Admin")
+    templates_dir = str(Path(__file__).parent / "templates")
+    admin = Admin(app=app, engine=engine, authentication_backend=authentication_backend, title="FundAnalyze Admin", templates_dir=templates_dir)
     
     admin.add_view(AdminUserAdmin)
     admin.add_view(UserAdmin)

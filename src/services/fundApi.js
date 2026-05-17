@@ -1,6 +1,39 @@
 // Real data service using Eastmoney API via local proxy
 
 export const fundApi = {
+    safeParseJSON: (text, fallback = null, label = 'JSON') => {
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            console.error(`Failed to parse ${label}`, e, text?.slice?.(0, 200));
+            return fallback;
+        }
+    },
+
+    safeExtractJSArray: (text, variableName) => {
+        try {
+            const regex = new RegExp(`var\\s+${variableName}\\s*=\\s*(\\[.*?\\]);`, 's');
+            const match = text.match(regex);
+            if (!match || !match[1]) return [];
+            return fundApi.safeParseJSON(match[1], [], `${variableName} array`);
+        } catch (e) {
+            console.error(`Failed to extract ${variableName}`, e);
+            return [];
+        }
+    },
+
+    safeReadJSONResponse: async (response, label) => {
+        const text = await response.text();
+        if (!response.ok) {
+            throw new Error(`${label} request failed: ${response.status}`);
+        }
+        const parsed = fundApi.safeParseJSON(text, null, label);
+        if (!parsed) {
+            throw new Error(`${label} returned non-JSON payload`);
+        }
+        return parsed;
+    },
+
     // Parsing JSONP format: jsonpgz({...});
     parseJsonp: (jsonpStr) => {
         try {
@@ -44,7 +77,7 @@ export const fundApi = {
 
                     // 从 lsjz 解析昨日净值与涨幅
                     if (lsjzRes.ok) {
-                        const lsjzJson = await lsjzRes.json();
+                        const lsjzJson = await fundApi.safeReadJSONResponse(lsjzRes, 'lsjz fallback');
                         const list = lsjzJson?.Data?.LSJZList;
                         if (list && list.length > 0) {
                             nav = list[0].DWJZ;
@@ -93,12 +126,13 @@ export const fundApi = {
 
             // Data_ACWorthTrend = [[timestamp, value], ...] (Cumulative Net Worth Trend)
             // Data_netWorthTrend = [{x: timestamp, y: value, ...}] (Net Worth Trend)
+            if (/^The page /i.test(text.trim()) || /^<!doctype html/i.test(text.trim()) || /^<html/i.test(text.trim())) {
+                console.error('Pingzhong returned unexpected HTML/text payload', text.slice(0, 200));
+                return { acTrend: [], netTrend: [] };
+            }
 
-            const acTrendMatch = text.match(/var Data_ACWorthTrend\s*=\s*(\[.*?\]);/s);
-            const netTrendMatch = text.match(/var Data_netWorthTrend\s*=\s*(\[.*?\]);/s);
-
-            const acTrend = acTrendMatch ? JSON.parse(acTrendMatch[1]) : [];
-            const netTrend = netTrendMatch ? JSON.parse(netTrendMatch[1]) : [];
+            const acTrend = fundApi.safeExtractJSArray(text, 'Data_ACWorthTrend');
+            const netTrend = fundApi.safeExtractJSArray(text, 'Data_netWorthTrend');
 
             return {
                 acTrend: acTrend.map(pt => ({ time: pt[0], value: pt[1] })),
@@ -164,7 +198,7 @@ export const fundApi = {
             // ?fundCode=001632&pageIndex=1&pageSize=1
             const response = await fetch(`/api/f10/lsjz?fundCode=${code}&pageIndex=1&pageSize=1`);
             if (!response.ok) return null;
-            const json = await response.json();
+            const json = await fundApi.safeReadJSONResponse(response, `prev change ${code}`);
             if (json && json.Data && json.Data.LSJZList && json.Data.LSJZList.length > 0) {
                 const item = json.Data.LSJZList[0];
                 // item.JZZZL is the growth rate (e.g., "0.34" means 0.34%)

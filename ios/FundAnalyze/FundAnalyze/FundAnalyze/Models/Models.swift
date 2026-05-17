@@ -27,6 +27,14 @@ struct FundPosition: Codable {
     let autoInvestAmount: Double
     let lastAutoInvestDate: String?
     let fund_name: String?  // 基金显示名称（后端已返回）
+    let keywords: [String]?
+}
+
+struct FundMetadata: Codable {
+    let fund_code: String
+    let fund_name: String
+    let fund_type: String?
+    let keywords: [String]
 }
 
 // MARK: - 基金行情代理模型 (东方财富)
@@ -44,6 +52,13 @@ struct RealTimeFund: Codable, Identifiable {
     var estChangeDouble: Double {
         Double(estChange ?? "0") ?? 0.0
     }
+}
+
+struct FundTrendPoint: Identifiable, Hashable {
+    let id: String
+    let date: String
+    let nav: Double
+    let changePercent: Double?
 }
 
 // MARK: - AI 诊断模型

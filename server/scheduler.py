@@ -22,6 +22,11 @@ import re
 import json
 
 scheduler = AsyncIOScheduler()
+FOREIGN_FUND_KEYWORDS = (
+    "qdii", "fof", "纳斯达克", "标普", "道琼斯", "越南", "印度", "日本", "德国",
+    "海外", "全球", "美国", "美股", "港股", "恒生", "香港", "中概", "亚洲",
+    "美元", "人民币", "互联", "科技市值"
+)
 
 def get_beijing_time():
     return datetime.now(timezone.utc) + timedelta(hours=8)
@@ -120,38 +125,98 @@ async def job_alerts_check():
 
     await write_cron_log("job_alerts_check", "success", f"预警检查完成，本次触发发送 {sent_count} 条邮件")
 
-async def fetch_actual_fund_change(code: str, target_date: str) -> tuple[float | None, str | None]:
+def is_foreign_related_fund(code: str, fund_name: str | None = None, fund_type: str | None = None) -> bool:
+    """识别海外/QDII/跨市场基金，这类基金净值通常比 A 股基金晚一个交易日。"""
+    if fund_type == "007":
+        return True
+    text = f"{code} {fund_name or ''}".lower()
+    return any(keyword.lower() in text for keyword in FOREIGN_FUND_KEYWORDS)
+
+def pick_change_from_history(
+    items: list[dict],
+    target_date: str,
+    allow_previous_date: bool,
+) -> tuple[float | None, str | None]:
+    for item in items:
+        if item.get("FSRQ") == target_date:
+            jzzzl = item.get("JZZZL")
+            if jzzzl is not None and jzzzl != "":
+                return float(jzzzl), target_date
+
+    if not allow_previous_date:
+        return None, None
+
+    target = datetime.fromisoformat(target_date).date()
+    for item in items:
+        nav_date_str = item.get("FSRQ")
+        jzzzl = item.get("JZZZL")
+        if not nav_date_str or jzzzl is None or jzzzl == "":
+            continue
+        try:
+            nav_date = datetime.fromisoformat(nav_date_str).date()
+        except ValueError:
+            continue
+        if nav_date <= target and (target - nav_date).days <= 7:
+            return float(jzzzl), nav_date_str
+
+    return None, None
+
+async def fetch_actual_fund_change(code: str, target_date: str, fund_name: str | None = None) -> tuple[float | None, str | None]:
     """
-    获取基金最新一条净值记录的涨跌幅和对应净值日期。
-    不强制匹配 target_date，因为凌晨 0:30 执行时当天净值可能还未公布。
+    获取用于结算的实际涨跌幅。
+    国内基金必须匹配 target_date；海外/QDII 基金若目标日尚未更新，允许使用最近一个更早净值日。
     返回 (涨跌幅, 净值日期) 或 (None, None)
     """
-    url = "http://api.fund.eastmoney.com/f10/lsjz"
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Referer": "http://fund.eastmoney.com/"
     }
-    params = {"fundCode": code, "pageIndex": 1, "pageSize": 3}
     async with httpx.AsyncClient(timeout=5.0) as client:
+        # 移动端接口通常比 Web 版 lsjz 更新更快，和 iOS 端“昨日涨跌”口径保持一致。
         try:
-            res = await client.get(url, params=params, headers=headers)
+            mobile_res = await client.get(
+                "https://fundmobapi.eastmoney.com/FundMNewApi/FundMNHisNetList",
+                params={
+                    "FCODE": code,
+                    "PageIndex": 1,
+                    "PageSize": 5,
+                    "deviceid": "Wap",
+                    "plat": "Wap",
+                    "product": "EFund",
+                    "Version": "2.0.0",
+                },
+                headers=headers,
+            )
+            if mobile_res.status_code == 200:
+                data = mobile_res.json()
+                result = pick_change_from_history(
+                    data.get("Datas", []) or [],
+                    target_date,
+                    allow_previous_date=is_foreign_related_fund(code, fund_name),
+                )
+                if result[0] is not None:
+                    return result
+        except Exception:
+            pass
+
+        try:
+            res = await client.get(
+                "http://api.fund.eastmoney.com/f10/lsjz",
+                params={"fundCode": code, "pageIndex": 1, "pageSize": 5},
+                headers=headers,
+            )
             if res.status_code == 200:
                 data = res.json()
                 if "Data" in data and data["Data"] and "LSJZList" in data["Data"]:
                     items = data["Data"]["LSJZList"]
-                    # 优先匹配 target_date，否则取最新一条
-                    for item in items:
-                        if item.get("FSRQ") == target_date:
-                            jzzzl = item.get("JZZZL")
-                            if jzzzl is not None and jzzzl != "":
-                                return float(jzzzl), target_date
-                    # 没有精确匹配时，取最新一条（最近交易日）
-                    latest = items[0] if items else None
-                    if latest:
-                        jzzzl = latest.get("JZZZL")
-                        nav_date = latest.get("FSRQ", "")
-                        if jzzzl is not None and jzzzl != "":
-                            return float(jzzzl), nav_date
+                    fund_type = data["Data"].get("FundType")
+                    result = pick_change_from_history(
+                        items,
+                        target_date,
+                        allow_previous_date=is_foreign_related_fund(code, fund_name, fund_type),
+                    )
+                    if result[0] is not None:
+                        return result
         except Exception:
             pass
     return None, None
@@ -186,11 +251,11 @@ async def job_auto_invest():
                     skipped_details.append({"code": f.fund_code, "reason": f"已结算 {f.last_auto_invest_date}"})
                     continue
                     
-                # 取最新净值（不强制匹配日期，凌晨时前一天净值可能未公布）
-                change, nav_date = await fetch_actual_fund_change(f.fund_code, target_date_str)
+                # 国内基金只用目标净值日期；海外/QDII 允许使用最近一个更早净值日。
+                change, nav_date = await fetch_actual_fund_change(f.fund_code, target_date_str, f.fund_name)
                 if change is None:
                     skipped_count += 1
-                    skipped_details.append({"code": f.fund_code, "reason": "接口返回无净值数据"})
+                    skipped_details.append({"code": f.fund_code, "reason": f"未找到可用于 {target_date_str} 结算的净值涨跌"})
                     continue
                 
                 # 将 nav_date 字符串转换为 date 对象（仅用于日志记录）
@@ -206,8 +271,6 @@ async def job_auto_invest():
                 new_amt = round(old_amt + profit + invest_amt, 2)
                 
                 f.amount = new_amt
-                # 防重字段始终记录 target_date，确保每个结算周期只执行一次
-                # 即使 nav_date 比 target_date 早（如净值公布延迟），也不会重复结算
                 f.last_auto_invest_date = target_date
                 
                 log = AutoInvestLog(
@@ -282,5 +345,3 @@ def start_scheduler():
     scheduler.add_job(job_auto_invest, 'cron', day_of_week='tue-sat', hour='0', minute='30', timezone='Asia/Shanghai')
     
     scheduler.start()
-
-

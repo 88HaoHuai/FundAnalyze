@@ -34,20 +34,20 @@ struct USStockView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         // 重点突出纳斯达克 (第一条数据)
-                        if let nasdaq = vm.indices.first(where: { $0.symbol == "NASDAQ" }) {
+                        if let nasdaq = vm.indices.first(where: { $0.symbol == "NASDAQ 100" }) {
                             NasdaqHighlightCard(index: nasdaq)
                         }
 
                         // 其他指数列表
                         VStack(spacing: 12) {
-                            ForEach(vm.indices.filter { $0.symbol != "NASDAQ" }) { index in
+                            ForEach(vm.indices.filter { $0.symbol != "NASDAQ 100" }) { index in
                                 IndexSmallRow(index: index)
                             }
                         }
                         .padding(.top, 8)
                         
                         // 友情提示
-                        Text("数据来源: 新浪财经 (延时约15分钟)")
+                        Text("数据来源: 腾讯财经 (延时约15分钟)")
                             .font(.system(size: 10))
                             .foregroundColor(.gray.opacity(0.6))
                             .padding(.top, 20)

@@ -42,10 +42,19 @@ export default async function handler(req, res) {
             return res.status(200).send(text);
         }
 
-        const data = await response.json();
-        res.status(200).json(data);
+        const text = await response.text();
+        try {
+            const data = JSON.parse(text);
+            return res.status(200).json(data);
+        } catch (parseError) {
+            console.error('Upstream returned non-JSON payload:', text.slice(0, 200));
+            return res.status(502).json({
+                error: 'Invalid upstream payload',
+                preview: text.slice(0, 200)
+            });
+        }
     } catch (error) {
         console.error('Proxy error:', error);
-        res.status(500).send('Internal Server Error');
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 }

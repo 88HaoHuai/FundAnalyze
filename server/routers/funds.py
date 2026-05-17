@@ -1,13 +1,27 @@
 """
 routers/funds.py — 基金与股票行情代理接口 (替代原有的 Vercel Serverless proxy)
 """
-from fastapi import APIRouter, Response, Query
+from fastapi import APIRouter, Response, Query, HTTPException
 import httpx
+import schemas
+from services.fund_metadata_service import fetch_fund_metadata
 
 router = APIRouter(prefix="/api", tags=["funds_proxy"])
 
 # HTTP 客户端配置
 timeout = httpx.Timeout(10.0)
+
+@router.get("/fund/meta/{code}", response_model=schemas.FundMetadataResponse)
+async def get_fund_meta(code: str):
+    """返回基金名称、类型与主题关键词"""
+    try:
+        metadata = await fetch_fund_metadata(code)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取基金元数据失败: {str(e)}")
+
+    if not metadata:
+        raise HTTPException(status_code=404, detail="未找到该基金元数据")
+    return metadata
 
 @router.get("/fund/{code}.js")
 async def get_fund_gz(code: str, rt: str = Query(None)):

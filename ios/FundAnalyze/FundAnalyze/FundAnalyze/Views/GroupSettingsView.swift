@@ -12,6 +12,18 @@ struct GroupSettingsView: View {
     
     var body: some View {
         List {
+            Section("AI 工具") {
+                NavigationLink(destination: AISettingsView()) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("AI 解读配置")
+                            .font(.headline)
+                        Text("配置 DeepSeek API Key，用于资讯页 AI 解读")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
             if vm.isLoading && vm.groups.isEmpty {
                 HStack {
                     Spacer()
