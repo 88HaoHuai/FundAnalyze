@@ -193,6 +193,10 @@ private struct FundTrendSection: View {
         filteredPoints.map(\.nav).max() ?? 0
     }
 
+    private var drawdownMetrics: TrendDrawdownMetrics? {
+        TrendDrawdownMetrics.build(from: trendEntries)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
@@ -217,8 +221,15 @@ private struct FundTrendSection: View {
 
             TrendRangeSelector(selectedRange: $selectedRange)
 
-            FundTrendChart(entries: trendEntries)
-                .frame(height: 180)
+            if let drawdownMetrics {
+                HStack(spacing: 12) {
+                    TrendStatPill(label: "最大回撤", value: "\(String(format: "%.2f", drawdownMetrics.drawdownPercent))%")
+                    TrendStatPill(label: "修复时间", value: drawdownMetrics.recoveryLabel)
+                }
+            }
+
+            FundTrendChart(entries: trendEntries, drawdownMetrics: drawdownMetrics)
+                .frame(height: 240)
 
             HStack(spacing: 12) {
                 TrendStatPill(label: "区间最低", value: String(format: "%.4f", minNav))
@@ -286,6 +297,68 @@ private struct TrendChartEntry: Identifiable {
     let changePercent: Double
 }
 
+private struct TrendDrawdownMetrics {
+    let peakIndex: Int
+    let troughIndex: Int
+    let recoveryIndex: Int?
+    let drawdownPercent: Double
+    let recoveryDays: Int?
+
+    var recoveryLabel: String {
+        if let recoveryDays {
+            return "\(recoveryDays)天"
+        }
+        return "尚未修复"
+    }
+
+    static func build(from entries: [TrendChartEntry]) -> TrendDrawdownMetrics? {
+        guard entries.count >= 2 else { return nil }
+
+        var peakIndex = 0
+        var bestPeakIndex = 0
+        var bestTroughIndex = 0
+        var maxNav = entries[0].nav
+        var maxDrawdown = 0.0
+
+        for index in entries.indices {
+            let nav = entries[index].nav
+            if nav > maxNav {
+                maxNav = nav
+                peakIndex = index
+            }
+
+            guard maxNav > 0 else { continue }
+            let drawdown = (maxNav - nav) / maxNav * 100
+            if drawdown > maxDrawdown {
+                maxDrawdown = drawdown
+                bestPeakIndex = peakIndex
+                bestTroughIndex = index
+            }
+        }
+
+        guard maxDrawdown > 0.01, bestTroughIndex > bestPeakIndex else { return nil }
+
+        let peakNav = entries[bestPeakIndex].nav
+        let recoveryIndex = entries.indices.dropFirst(bestTroughIndex + 1).first { entries[$0].nav >= peakNav }
+        let recoveryDays: Int?
+        if let recoveryIndex,
+           let troughDate = entries[bestTroughIndex].parsedDate,
+           let recoveryDate = entries[recoveryIndex].parsedDate {
+            recoveryDays = max(Calendar.current.dateComponents([.day], from: troughDate, to: recoveryDate).day ?? 0, 0)
+        } else {
+            recoveryDays = nil
+        }
+
+        return TrendDrawdownMetrics(
+            peakIndex: bestPeakIndex,
+            troughIndex: bestTroughIndex,
+            recoveryIndex: recoveryIndex,
+            drawdownPercent: maxDrawdown,
+            recoveryDays: recoveryDays
+        )
+    }
+}
+
 private struct TrendRangeSelector: View {
     @Binding var selectedRange: TrendRange
 
@@ -310,6 +383,7 @@ private struct TrendRangeSelector: View {
 
 private struct FundTrendChart: View {
     let entries: [TrendChartEntry]
+    let drawdownMetrics: TrendDrawdownMetrics?
 
     private var yAxisValues: [Double] {
         guard !entries.isEmpty else { return [0, 0, 0, 0] }
@@ -323,11 +397,15 @@ private struct FundTrendChart: View {
 
     private var xAxisLabels: [String] {
         guard !entries.isEmpty else { return [] }
-        let indexes = Array(Set([0, max(entries.count / 2, 0), max(entries.count - 1, 0)])).sorted()
-        return indexes.compactMap { index in
+        return xAxisIndexes.compactMap { index in
             guard entries.indices.contains(index) else { return nil }
             return simplifiedDate(entries[index].date)
         }
+    }
+
+    private var xAxisIndexes: [Int] {
+        guard !entries.isEmpty else { return [] }
+        return Array(Set([0, max(entries.count / 2, 0), max(entries.count - 1, 0)])).sorted()
     }
 
     private var strokeColor: Color {
@@ -370,19 +448,84 @@ private struct FundTrendChart: View {
                                 .foregroundColor(.gray)
                                 .position(x: leftAxisWidth / 2, y: y)
                         }
-                        Path { path in
-                            for (index, entry) in entries.enumerated() {
-                                let x = leftAxisWidth + CGFloat(index) / CGFloat(steps) * chartWidth
-                                let yRatio = (entry.changePercent - minValue) / range
-                                let y = chartHeight - CGFloat(yRatio) * chartHeight + topPadding
-                                if index == 0 {
-                                    path.move(to: CGPoint(x: x, y: y))
-                                } else {
-                                    path.addLine(to: CGPoint(x: x, y: y))
-                                }
+
+                        if let drawdownMetrics,
+                           let recoveryIndex = drawdownMetrics.recoveryIndex {
+                            let startX = xPosition(for: drawdownMetrics.troughIndex, steps: steps, chartWidth: chartWidth, leftAxisWidth: leftAxisWidth)
+                            let endX = xPosition(for: recoveryIndex, steps: steps, chartWidth: chartWidth, leftAxisWidth: leftAxisWidth)
+
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.red.opacity(0.08))
+                                .frame(width: max(endX - startX, 6), height: chartHeight)
+                                .position(x: startX + (endX - startX) / 2, y: topPadding + chartHeight / 2)
+                        }
+
+                        trendPath(
+                            for: entries,
+                            steps: steps,
+                            chartWidth: chartWidth,
+                            chartHeight: chartHeight,
+                            leftAxisWidth: leftAxisWidth,
+                            topPadding: topPadding,
+                            minValue: minValue,
+                            range: range
+                        )
+                            .stroke(Color.blue.opacity(0.24), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+
+                        if let drawdownMetrics {
+                            let drawdownEntries = Array(entries[drawdownMetrics.peakIndex...drawdownMetrics.troughIndex])
+                            trendPath(
+                                for: drawdownEntries,
+                                steps: steps,
+                                chartWidth: chartWidth,
+                                chartHeight: chartHeight,
+                                leftAxisWidth: leftAxisWidth,
+                                topPadding: topPadding,
+                                minValue: minValue,
+                                range: range
+                            )
+                                .stroke(Color(red: 0.39, green: 0.75, blue: 0.66), style: StrokeStyle(lineWidth: 2.1, lineCap: .round, lineJoin: .round))
+
+                            if let recoveryIndex = drawdownMetrics.recoveryIndex, recoveryIndex > drawdownMetrics.troughIndex {
+                                let recoveryEntries = Array(entries[drawdownMetrics.troughIndex...recoveryIndex])
+                                trendPath(
+                                    for: recoveryEntries,
+                                    steps: steps,
+                                    chartWidth: chartWidth,
+                                    chartHeight: chartHeight,
+                                    leftAxisWidth: leftAxisWidth,
+                                    topPadding: topPadding,
+                                    minValue: minValue,
+                                    range: range
+                                )
+                                    .stroke(Color(red: 0.90, green: 0.39, blue: 0.44), style: StrokeStyle(lineWidth: 2.1, lineCap: .round, lineJoin: .round))
                             }
                         }
-                        .stroke(strokeColor, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+
+                        trendPath(
+                            for: entries,
+                            steps: steps,
+                            chartWidth: chartWidth,
+                            chartHeight: chartHeight,
+                            leftAxisWidth: leftAxisWidth,
+                            topPadding: topPadding,
+                            minValue: minValue,
+                            range: range
+                        )
+                            .stroke(strokeColor, style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+
+                        if let drawdownMetrics {
+                            drawdownMarkers(
+                                metrics: drawdownMetrics,
+                                minValue: minValue,
+                                range: range,
+                                chartWidth: chartWidth,
+                                chartHeight: chartHeight,
+                                leftAxisWidth: leftAxisWidth,
+                                topPadding: topPadding,
+                                steps: steps
+                            )
+                        }
 
                         if let lastEntry = entries.last {
                             let x = leftAxisWidth + CGFloat(entries.count - 1) / CGFloat(steps) * chartWidth
@@ -391,7 +534,7 @@ private struct FundTrendChart: View {
 
                             Circle()
                                 .fill(strokeColor)
-                                .frame(width: 10, height: 10)
+                                .frame(width: 7, height: 7)
                                 .position(x: x, y: y)
                         }
                     }
@@ -415,6 +558,128 @@ private struct FundTrendChart: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func drawdownMarkers(
+        metrics: TrendDrawdownMetrics,
+        minValue: Double,
+        range: Double,
+        chartWidth: CGFloat,
+        chartHeight: CGFloat,
+        leftAxisWidth: CGFloat,
+        topPadding: CGFloat,
+        steps: Int
+    ) -> some View {
+        let peakEntry = entries[metrics.peakIndex]
+        let troughEntry = entries[metrics.troughIndex]
+        let peakPoint = point(for: peakEntry, index: metrics.peakIndex, steps: steps, chartWidth: chartWidth, chartHeight: chartHeight, leftAxisWidth: leftAxisWidth, topPadding: topPadding, minValue: minValue, range: range)
+        let troughPoint = point(for: troughEntry, index: metrics.troughIndex, steps: steps, chartWidth: chartWidth, chartHeight: chartHeight, leftAxisWidth: leftAxisWidth, topPadding: topPadding, minValue: minValue, range: range)
+
+        Path { path in
+            path.move(to: peakPoint)
+            path.addLine(to: troughPoint)
+        }
+        .stroke(Color(red: 0.39, green: 0.75, blue: 0.66).opacity(0.45), style: StrokeStyle(lineWidth: 1.2, dash: [5, 4]))
+
+        Circle()
+            .fill(Color(red: 0.39, green: 0.75, blue: 0.66))
+            .frame(width: 8, height: 8)
+            .position(troughPoint)
+
+        annotationBubble(
+            text: "最大回撤\(String(format: "%.2f", metrics.drawdownPercent))%",
+            background: Color(red: 0.39, green: 0.75, blue: 0.66)
+        )
+        .position(
+            x: min(max(troughPoint.x - 34, leftAxisWidth + 68), leftAxisWidth + chartWidth - 68),
+            y: max(troughPoint.y - 26, 18)
+        )
+
+        if let recoveryIndex = metrics.recoveryIndex {
+            let recoveryEntry = entries[recoveryIndex]
+            let recoveryPoint = point(for: recoveryEntry, index: recoveryIndex, steps: steps, chartWidth: chartWidth, chartHeight: chartHeight, leftAxisWidth: leftAxisWidth, topPadding: topPadding, minValue: minValue, range: range)
+
+            Circle()
+                .fill(Color(red: 0.90, green: 0.39, blue: 0.44))
+                .frame(width: 8, height: 8)
+                .position(recoveryPoint)
+
+            annotationBubble(
+                text: "\(metrics.recoveryLabel)修复",
+                background: Color(red: 0.90, green: 0.39, blue: 0.44)
+            )
+            .position(
+                x: min(max(recoveryPoint.x - 8, leftAxisWidth + 62), leftAxisWidth + chartWidth - 62),
+                y: max(recoveryPoint.y - 30, 20)
+            )
+        }
+    }
+
+    private func trendPath(
+        for subset: [TrendChartEntry],
+        steps: Int,
+        chartWidth: CGFloat,
+        chartHeight: CGFloat,
+        leftAxisWidth: CGFloat,
+        topPadding: CGFloat,
+        minValue: Double,
+        range: Double
+    ) -> Path {
+        Path { path in
+            guard !subset.isEmpty else { return }
+            for (subsetIndex, entry) in subset.enumerated() {
+                guard let globalIndex = entries.firstIndex(where: { $0.id == entry.id }) else { continue }
+                let point = point(
+                    for: entry,
+                    index: globalIndex,
+                    steps: steps,
+                    chartWidth: chartWidth,
+                    chartHeight: chartHeight,
+                    leftAxisWidth: leftAxisWidth,
+                    topPadding: topPadding,
+                    minValue: minValue,
+                    range: range
+                )
+                if subsetIndex == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+        }
+    }
+
+    private func point(
+        for entry: TrendChartEntry,
+        index: Int,
+        steps: Int,
+        chartWidth: CGFloat,
+        chartHeight: CGFloat,
+        leftAxisWidth: CGFloat,
+        topPadding: CGFloat,
+        minValue: Double,
+        range: Double
+    ) -> CGPoint {
+        let x = xPosition(for: index, steps: steps, chartWidth: chartWidth, leftAxisWidth: leftAxisWidth)
+        let yRatio = (entry.changePercent - minValue) / range
+        let y = chartHeight - CGFloat(yRatio) * chartHeight + topPadding
+        return CGPoint(x: x, y: y)
+    }
+
+    private func xPosition(for index: Int, steps: Int, chartWidth: CGFloat, leftAxisWidth: CGFloat) -> CGFloat {
+        leftAxisWidth + CGFloat(index) / CGFloat(max(steps, 1)) * chartWidth
+    }
+
+    private func annotationBubble(text: String, background: Color) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(background)
+            .cornerRadius(10)
+            .shadow(color: background.opacity(0.18), radius: 4, x: 0, y: 2)
     }
 
     private func percentLabel(_ value: Double) -> String {
@@ -467,6 +732,12 @@ private extension FundTrendPoint {
             return formatter
         }
     }()
+}
+
+private extension TrendChartEntry {
+    var parsedDate: Date? {
+        FundTrendPoint(id: id, date: date, nav: nav, changePercent: changePercent).parsedDate
+    }
 }
 
 private struct FundHeroCard: View {
