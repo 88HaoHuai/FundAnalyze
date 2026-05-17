@@ -35,8 +35,7 @@ struct MainView: View {
 
             // Tab 4: 资讯
             NavigationView {
-                Text("实时快讯 (建设中)")
-                    .navigationTitle("资讯")
+                NewsView()
             }
             .tabItem {
                 Label("资讯", systemImage: "newspaper")

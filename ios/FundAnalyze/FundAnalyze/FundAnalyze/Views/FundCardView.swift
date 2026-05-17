@@ -4,6 +4,7 @@ struct FundCardView: View {
     let code: String
     let position: FundPosition?
     let realTimeData: RealTimeFund?
+    let isAmountHidden: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
@@ -27,7 +28,7 @@ struct FundCardView: View {
                             .fixedSize()
 
                         if let pos = position, pos.amount > 0 {
-                            Text("持仓: ¥\(String(format: "%.2f", pos.amount))")
+                            Text(isAmountHidden ? "持仓: ****" : "持仓: ¥\(String(format: "%.2f", pos.amount))")
                                 .font(.system(size: 10))
                                 .foregroundColor(.purple)
                                 .padding(.horizontal, 4)
@@ -52,9 +53,9 @@ struct FundCardView: View {
                 let pSign = profit > 0 ? "+" : ""
                 let pColor: Color = profit > 0 ? .red : (profit == 0 ? .gray : .green)
 
-                Text("\(pSign)\(String(format: "%.2f", profit))")
+                Text(isAmountHidden ? "****" : "\(pSign)\(String(format: "%.2f", profit))")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(pColor)
+                    .foregroundColor(isAmountHidden ? .gray : pColor)
 
                 Text("\(change > 0 ? "+" : "")\(String(format: "%.2f", change))%")
                     .font(.system(size: 12))

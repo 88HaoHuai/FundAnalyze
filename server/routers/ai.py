@@ -16,6 +16,11 @@ class AIAdviceRequest(BaseModel):
     rsi: float = 50
     is_auto_invest: bool = False
 
+class NewsAIRequest(BaseModel):
+    title: str
+    content: str
+    fundSectors: str = ""
+
 @router.post("/ai_advice")
 async def get_ai_advice(req: AIAdviceRequest):
     """请求 AI 给基金做出诊断建议"""
@@ -84,3 +89,57 @@ async def get_ai_advice(req: AIAdviceRequest):
             return {'success': True, 'data': final_dict}
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
+@router.post("/ai")
+async def analyze_news(req: NewsAIRequest):
+    """对财经资讯进行简要情绪和板块影响分析"""
+    url = "https://api.siliconflow.cn/v1/chat/completions"
+    sectors_text = req.fundSectors or "A股, 港股, 红利, 半导体, 人工智能, 医药, 新能源"
+    system_prompt = f"""你是一个顶级的金融量化分析师。请分析用户发给你的财经快讯，并提供以下四个维度的结构化提取。
+强制要求：严格只返回合法合规的 JSON 格式，结构如下：
+{{
+    "sentiment": "利好",
+    "score": 85,
+    "summary": "一句话摘要",
+    "impact": ["板块名1", "板块名2"]
+}}
+注意：
+1. sentiment 只能是 "利好", "利空", "中性" 之一。
+2. score 是 0-100 的整数，表示情绪烈度。
+3. summary 必须简洁，控制在 40 个字以内。
+4. impact 数组尽量从以下关注主题中选择，不要编造：[{sectors_text}]
+"""
+    payload = {
+        "model": config.AI_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"快讯标题：{req.title}\n\n详细内容：{req.content}"}
+        ],
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"}
+    }
+    headers = {
+        "Authorization": f"Bearer {config.AI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            res = await client.post(url, json=payload, headers=headers)
+            res.raise_for_status()
+            result_json = res.json()
+            ai_msg = result_json["choices"][0]["message"]["content"]
+
+            import json
+            if ai_msg.startswith("```"):
+                ai_msg = ai_msg.strip("`").replace("json\n", "", 1)
+
+            final_dict = json.loads(ai_msg)
+            if final_dict.get("sentiment") not in {"利好", "利空", "中性"}:
+                final_dict["sentiment"] = "中性"
+            if not isinstance(final_dict.get("impact"), list):
+                final_dict["impact"] = []
+
+            return {"success": True, "data": final_dict}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

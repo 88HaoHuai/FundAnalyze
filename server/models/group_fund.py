@@ -12,6 +12,8 @@ class GroupFund(Base):
     group_id: Mapped[int] = mapped_column(Integer, ForeignKey("fund_groups.id", ondelete="CASCADE"), nullable=False)
     fund_code: Mapped[str] = mapped_column(String(20), nullable=False)
     fund_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    fund_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    fund_keywords: Mapped[str | None] = mapped_column(String(500), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     amount: Mapped[float]   = mapped_column(Numeric(15, 2), default=0)
     is_auto_invest: Mapped[bool]   = mapped_column(Boolean, default=False)

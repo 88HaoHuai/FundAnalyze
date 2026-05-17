@@ -68,3 +68,10 @@ class MarketFundResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class FundMetadataResponse(BaseModel):
+    fund_code: str
+    fund_name: str
+    fund_type: Optional[str] = None
+    keywords: List[str] = []
